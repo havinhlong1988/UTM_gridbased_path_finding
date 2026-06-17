@@ -1,0 +1,23 @@
+{
+  "project": "Hoa Lac study area GIS download",
+  "output_dir": "output/01_HoaLac_studies_area",
+  "place_name": "Hoa Lac Hi-Tech Park, Hanoi, Vietnam",
+  "used_place_name": false,
+  "bbox_fallback": {
+    "west": 105.47,
+    "south": 20.965,
+    "east": 105.62,
+    "north": 21.095
+  },
+  "aoi_bounds_wgs84": {
+    "west": 105.5035,
+    "south": 20.9815,
+    "east": 105.5735,
+    "north": 21.0285
+  },
+  "osm_network_type": "all",
+  "opentopography_dem_type": "SRTMGL1",
+  "opentopography_api_key_set": true,
+  "download_openbuildingmap": true,
+  "obm_manifest_url": "https://umap.openstreetmap.de/de/datalayer/81684/ac9788a9-c215-417d-a580-cb545acd78b9/"
+}

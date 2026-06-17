@@ -1,0 +1,2 @@
+tile_name,remote_url,local_file,status
+e105_n25_e110_n20,https://data.source.coop/tge-labs/globalbuildingatlas-lod1/e105_n25_e110_n20.parquet,output/01_HoaLac_studies_area/globalbuildingatlas_lod1/raw_tiles/e105_n25_e110_n20.parquet,downloaded

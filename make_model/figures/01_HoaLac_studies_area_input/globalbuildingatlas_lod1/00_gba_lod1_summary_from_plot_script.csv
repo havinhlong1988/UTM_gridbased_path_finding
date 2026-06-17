@@ -1,0 +1,2 @@
+source_file,n_buildings_map_region,n_buildings_inside_aoi,n_buildings_outside_aoi_shown,stats_use_inside_aoi_only,height_min_m,height_mean_m,height_median_m,height_max_m,total_footprint_area_m2,total_volume_m3
+output/01_HoaLac_studies_area/globalbuildingatlas_lod1/processed/gba_lod1_buildings_hoalac_clipped.gpkg,14894,14894,0,True,0.011438543908298016,3.832255940458772,3.8217949867248535,40.2683219909668,1607551.9009624878,7731619.3641109215

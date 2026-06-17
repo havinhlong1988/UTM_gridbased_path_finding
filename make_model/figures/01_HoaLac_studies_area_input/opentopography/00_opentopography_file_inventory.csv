@@ -1,0 +1,10 @@
+relative_path,suffix,size_mb,is_raster_candidate,is_table_candidate,is_vector_candidate,skipped_summary_metadata_name,forbidden_model_file
+opentopography_SRTMGL1_dem_utm.tif,.tif,0.02756023406982422,True,False,False,False,False
+opentopography_SRTMGL1_dem_wgs84.tif,.tif,0.025659561157226562,True,False,False,False,False
+terrain_products/aspect_degree.tif,.tif,0.060828208923339844,True,False,False,False,False
+terrain_products/hillshade.tif,.tif,0.06785011291503906,True,False,False,False,False
+terrain_products/roughness_3x3_m.tif,.tif,0.0290985107421875,True,False,False,False,False
+terrain_products/slope_degree.tif,.tif,0.052033424377441406,True,False,False,False,False
+terrain_products/slope_percent.tif,.tif,0.049896240234375,True,False,False,False,False
+terrain_products/terrain_statistics.csv,.csv,0.0003528594970703125,False,True,False,True,False
+terrain_products/tpi_3x3_m.tif,.tif,0.04951667785644531,True,False,False,False,False

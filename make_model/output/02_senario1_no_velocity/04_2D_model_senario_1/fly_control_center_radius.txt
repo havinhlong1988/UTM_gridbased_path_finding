@@ -1,0 +1,4 @@
+center_lon 105.4960350000
+center_lat 21.0325244826
+radius_m 3997.008
+radius_km 3.997

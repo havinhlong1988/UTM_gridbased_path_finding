@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Hoa Lac research interest region</name>
+
+    <Style id="research_polygon_style">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>330000ff</color>
+      </PolyStyle>
+    </Style>
+
+    <Placemark>
+      <name>Hoa Lac research interest region</name>
+      <styleUrl>#research_polygon_style</styleUrl>
+      <Polygon>
+        <tessellate>1</tessellate>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              105.50350000,21.01450000,0
+              105.51250000,20.99350000,0
+              105.53100000,20.98150000,0
+              105.55650000,20.98450000,0
+              105.57350000,20.99850000,0
+              105.57050000,21.01900000,0
+              105.54800000,21.02850000,0
+              105.52050000,21.02700000,0
+              105.50350000,21.01450000,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+
+  </Document>
+</kml>

@@ -1,0 +1,38 @@
+2026-06-15 11:06:51,513 | INFO | ================================================================================
+2026-06-15 11:06:51,513 | INFO | START GIS DOWNLOAD PIPELINE: OSM + OPENTOPOGRAPHY + OPTIONAL OBM
+2026-06-15 11:06:51,513 | INFO | ================================================================================
+2026-06-15 11:06:51,518 | INFO | Using user-defined Hoa Lac polygon AOI.
+2026-06-15 11:06:51,535 | INFO | Created 1 records
+2026-06-15 11:06:51,545 | INFO | Created 1 records
+2026-06-15 11:06:51,545 | INFO | Metadata saved: output/01_HoaLac_studies_area/metadata
+2026-06-15 11:06:51,545 | INFO | Downloading OSM road network...
+2026-06-15 11:06:52,592 | INFO | MASK_ROADS_TO_AOI=False, keep original OSM road geometries.
+2026-06-15 11:06:52,632 | INFO | Created 5,250 records
+2026-06-15 11:06:52,719 | INFO | Created 5,250 records
+2026-06-15 11:06:52,730 | INFO | Created 2,195 records
+2026-06-15 11:06:52,740 | INFO | OSM roads saved: output/01_HoaLac_studies_area/osm/roads
+2026-06-15 11:06:52,740 | INFO | Downloading extra OSM features...
+2026-06-15 11:06:52,818 | INFO | Created 435 records
+2026-06-15 11:06:52,848 | INFO | Created 435 records
+2026-06-15 11:06:52,857 | INFO | Extra OSM features saved: output/01_HoaLac_studies_area/osm/extra_features
+2026-06-15 11:06:52,859 | INFO | Downloading DEM from OpenTopography...
+2026-06-15 11:07:04,783 | INFO | DEM saved: output/01_HoaLac_studies_area/opentopography/opentopography_SRTMGL1_dem_wgs84.tif
+2026-06-15 11:07:04,824 | INFO | Projected DEM saved: output/01_HoaLac_studies_area/opentopography/opentopography_SRTMGL1_dem_utm.tif
+2026-06-15 11:07:04,843 | INFO | Terrain products saved: output/01_HoaLac_studies_area/opentopography/terrain_products
+2026-06-15 11:07:04,843 | INFO | ================================================================================
+2026-06-15 11:07:04,843 | INFO | START OPTIONAL OPENBUILDINGMAP DOWNLOAD
+2026-06-15 11:07:04,843 | INFO | ================================================================================
+2026-06-15 11:07:04,843 | INFO | Downloading OBM manifest: https://umap.openstreetmap.de/de/datalayer/81684/ac9788a9-c215-417d-a580-cb545acd78b9/
+2026-06-15 11:07:04,843 | INFO | Downloading: https://umap.openstreetmap.de/de/datalayer/81684/ac9788a9-c215-417d-a580-cb545acd78b9/
+2026-06-15 11:07:08,524 | INFO | Created 1 records
+2026-06-15 11:07:08,526 | INFO | Selected OBM tiles intersecting AOI: 1
+2026-06-15 11:07:08,527 | INFO | OBM tile URL: https://datapub.gfz.de/download/10.5880.GFZ.LKUT.2025.002-Caweb/2025-002_Oostwegel-et-al_data/building.132210.gpkg.bz2
+2026-06-15 11:07:08,527 | INFO | Downloading: https://datapub.gfz.de/download/10.5880.GFZ.LKUT.2025.002-Caweb/2025-002_Oostwegel-et-al_data/building.132210.gpkg.bz2
+2026-06-15 11:14:18,714 | INFO | Decompressing OBM tile: output/01_HoaLac_studies_area/openbuildingmap/raw/building.132210.gpkg.bz2 -> output/01_HoaLac_studies_area/openbuildingmap/raw/building.132210.gpkg
+2026-06-15 11:17:48,362 | INFO | Created 22,599 records
+2026-06-15 11:17:48,778 | INFO | Created 22,599 records
+2026-06-15 11:17:48,827 | INFO | OpenBuildingMap optional data saved: output/01_HoaLac_studies_area/openbuildingmap/clipped
+2026-06-15 11:17:48,837 | INFO | ================================================================================
+2026-06-15 11:17:48,837 | INFO | DONE
+2026-06-15 11:17:48,837 | INFO | Output folder: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/downloaddata/output/01_HoaLac_studies_area
+2026-06-15 11:17:48,837 | INFO | ================================================================================

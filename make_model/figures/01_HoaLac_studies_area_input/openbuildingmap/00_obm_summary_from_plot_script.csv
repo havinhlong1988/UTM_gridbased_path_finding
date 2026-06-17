@@ -1,0 +1,2 @@
+source_file,n_buildings_map_region,n_buildings_inside_aoi,n_buildings_outside_aoi_shown,stats_use_inside_aoi_only,height_min_m,height_mean_m,height_median_m,height_max_m,total_footprint_area_m2,total_volume_m3
+output/01_HoaLac_studies_area/openbuildingmap/clipped/obm_buildings_hoalac_clipped.gpkg,22599,22599,0,True,3.0,4.668060533651931,4.5,69.0,1918668.4262917084,10016573.971132137

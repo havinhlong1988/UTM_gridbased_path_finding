@@ -1,0 +1,2 @@
+id,fid,quadkey,filename,URL,license,number_of_buildings,percentage_known_occupancy,percentage_known_height,percentage_known_floorspace,percentage_source_google,percentage_source_microsoft,percentage_source_openstreetmap,completeness_index
+I2NzQ,917,132210,building.132210.gpkg,https://datapub.gfz.de/download/10.5880.GFZ.LKUT.2025.002-Caweb/2025-002_Oostwegel-et-al_data/building.132210.gpkg.bz2,ODbL,38475208,17.95,74.75,0.02,95.42,3.87,0.71,93.19

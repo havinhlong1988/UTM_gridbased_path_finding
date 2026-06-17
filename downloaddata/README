@@ -1,0 +1,51 @@
+# README FILE FOR THE DOWNLOAD
+# Created: 2026-06-15 - by longhv36@viettel.com.vn
+# The script that designed to dowload the data from open sources for the study area
+# 1. Open street map: for road map 
+# 2. Open Topography: for topography and land use
+# 3. Open Building map: Building data (current not use)
+# 4. GlobalBuildingAtlas: Open buiding atlas - current use for building data.  
+# --- 20260616: Add the part download the weather data - open source
+# 5. Open meteo - forecast dat: https://open-meteo.com/
+# 6. Era5: Historical data https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview weather data - but not yet included in the download
+# -----------------------------------------------------------
+# The data dowloaded save in the output‌‌‌/ directory with the specific structure.
+#    output/01_HoaLac_studies_area/
+#    ├── metadata/
+#    ├── osm/
+#    │   ├── roads/
+#    │   └── extra_features/
+#    ├── opentopography/
+#    │   └── terrain_products/
+#    ├── openbuildingmap/
+#    │   └── clipped/
+#    └── globalbuildingatlas_lod1/
+#        ├── metadata/
+#        ├── raw_tiles/
+#        ├── processed/
+#        └── figures/
+# ------------------------------------- Add the part for download the weather data from open sources ----------------------
+# output/01_HoaLac_studies_area/openmeteo/
+# ├── raw/
+# │   └── 20260617_010000UTC/
+# │       ├── openmeteo_raw_chunk_001.json
+# │       ├── openmeteo_raw_chunk_002.json
+# │       └── request_metadata.json
+# │
+# ├── csv/
+# │   ├── openmeteo_hoalac_next1h_latest.csv
+# │   └── openmeteo_hoalac_next1h_20260617_010000UTC.csv
+# │
+# ├── figures/
+# │   └── 20260617_010000UTC/
+# │       ├── lead_01_20260617_0200UTC_wind_speed_10m_plus_wind_direction_10m_surface.png
+# │       ├── lead_01_20260617_0200UTC_wind_speed_80m_plus_wind_direction_80m_surface.png
+# │       ├── lead_01_20260617_0200UTC_precipitation_surface.png
+# │       └── ...
+# │
+# └── summary/
+#     ├── openmeteo_hoalac_next1h_latest_summary.csv
+#     └── openmeteo_download_log.csv
+# ###########################################################################################################################################
+# Next - copy the output/* to ../makemodel/input/ to run the calculation - costmap and make the input model to estimate the pathfinding cost 
+# ###########################################################################################################################################

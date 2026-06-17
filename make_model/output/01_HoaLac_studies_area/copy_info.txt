@@ -1,0 +1,7 @@
+Copy input from downloaddata
+Time: 2026-06-15T11:20:50
+Project dir: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding
+Source: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/downloaddata/output/01_HoaLac_studies_area
+Destination: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/make_model/output/01_HoaLac_studies_area
+Overwrite existing: True
+Clean destination first: False
