@@ -53,6 +53,12 @@ PATH_NAME = "path_senario1"
 # "plot_only" = skip algorithm and replot from saved path CSV files
 RUN_MODE = "full"
 
+# Print elapsed processing time after each algorithm and after the full batch.
+PRINT_PROCESSING_TIME = True
+
+# Save a small JSON timing report inside each algorithm output directory.
+SAVE_PROCESSING_TIME_JSON = True
+
 # ============================================================
 # Possible path connection settings
 # ============================================================
@@ -170,7 +176,7 @@ END_COORD = None
 # ============================================================
 
 # Number of fastest paths to RUN in full mode, or to PLOT in plot_only mode.
-MULTI_PATH_K_PATHS = 10
+MULTI_PATH_K_PATHS = 100
 
 # Folder value to read/write for multiple runs.
 #
@@ -248,7 +254,34 @@ MULTI_PATH_NON_OVERLAP_BLOCK_EDGES = True
 # If MULTI_PATH_N_CORES is None, or larger than machine CPU count,
 # use n_cpu - 1 in the algorithm script.
 MULTI_PATH_PARALLEL = True
-MULTI_PATH_N_CORES = None
+MULTI_PATH_N_CORES = 10
+
+# Parallel mode for non-overlap path population:
+#   "sequential"      = one exact search, lock path, repeat.
+#   "candidate_pool"  = for each rank, run several candidate searches in
+#                       parallel, accept the best valid non-overlap candidate,
+#                       then lock its nodes/edges before the next rank.
+MULTI_PATH_PARALLEL_MODE = "candidate_pool"
+
+# Number of candidate searches launched for each path rank.
+# Usually set close to the number of CPU cores you want to use.
+MULTI_PATH_CANDIDATES_PER_ROUND = 10
+
+# If one candidate round cannot find a usable non-overlap path, retry with
+# stronger diversity up to this many rounds for the same rank.
+MULTI_PATH_MAX_ROUNDS_PER_PATH = 3
+
+# Search-only diversity penalty used by candidate_pool workers.
+# 0.0 = all workers search the same exact best path.
+# 0.10-0.50 usually gives useful alternative corridors.
+# Returned path costs are still reported using the true original cost.
+MULTI_PATH_CANDIDATE_DIVERSITY_WEIGHT = 0.5
+
+# Fixed seed keeps results reproducible between runs.
+MULTI_PATH_CANDIDATE_SEED = 20260618
+
+# Optional per-worker expansion limit. None means use MULTI_PATH_MAX_EXPANSIONS.
+MULTI_PATH_MAX_EXPANSIONS_PER_CANDIDATE = None
 
 
 # ============================================================

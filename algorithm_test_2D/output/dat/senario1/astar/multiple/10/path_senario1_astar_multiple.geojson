@@ -7,7 +7,7 @@
         "name": "path_senario1_astar_multiple",
         "algorithm": "astar_multiple",
         "success": true,
-        "total_cost": 7.5082413628555535,
+        "total_cost": 3.7544270229512753,
         "path_nodes": 28,
         "expanded_nodes": null,
         "runtime_seconds": null

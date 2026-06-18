@@ -29,6 +29,9 @@ from __future__ import annotations
 
 import heapq
 import math
+import os
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import defaultdict
 from typing import Any
 
@@ -466,6 +469,36 @@ def _blocked_edges_from_path(path: list[int], allowed_overlap_nodes: set[int]) -
     return blocked
 
 
+
+def _candidate_unit_hash(node: int, seed: int) -> float:
+    """Deterministic pseudo-random value in [0, 1] for candidate diversity."""
+    x = (int(node) + 0x9E3779B9) ^ (int(seed) * 0x85EBCA6B)
+    x = (x ^ (x >> 16)) * 0x7FEB352D
+    x = (x ^ (x >> 15)) * 0x846CA68B
+    x = x ^ (x >> 16)
+    return float(x & 0xFFFFFFFF) / float(0xFFFFFFFF)
+
+
+def _resolve_worker_count(parallel: bool, n_cores: int | None, candidates_per_round: int) -> int:
+    """Resolve the number of worker processes for candidate-pool mode."""
+    if not parallel:
+        return 1
+
+    cpu_count = os.cpu_count() or 1
+    if n_cores is None:
+        workers = max(1, cpu_count - 1)
+    else:
+        try:
+            workers = int(n_cores)
+        except Exception:
+            workers = max(1, cpu_count - 1)
+        if workers <= 0:
+            workers = max(1, cpu_count - 1)
+
+    workers = min(workers, max(1, int(candidates_per_round)), cpu_count)
+    return max(1, int(workers))
+
+
 def _astar_search_one(
     model,
     provider: NeighborProvider,
@@ -481,13 +514,23 @@ def _astar_search_one(
     use_turn_penalty: bool,
     forbidden_nodes: set[int] | None = None,
     forbidden_edges: set[tuple[int, int]] | None = None,
+    candidate_seed: int = 0,
+    candidate_diversity_weight: float = 0.0,
     verbose: bool = True,
 ) -> tuple[dict[str, Any] | None, int, str]:
-    """Find one best path while respecting optional forbidden nodes/edges."""
+    """Find one best path while respecting optional forbidden nodes/edges.
+
+    candidate_diversity_weight is used only for candidate-pool search.  It adds
+    a deterministic search-only node penalty so different workers can explore
+    different corridors.  The returned total_cost/travel_cost/turn_cost are
+    recomputed from the original path cost, not from the diversity penalty.
+    """
     start_idx = int(start_idx)
     end_idx = int(end_idx)
     forbidden_nodes = {int(i) for i in (forbidden_nodes or set())}
     forbidden_edges = set(forbidden_edges or set())
+    candidate_seed = int(candidate_seed or 0)
+    candidate_diversity_weight = max(0.0, float(candidate_diversity_weight or 0.0))
 
     # Never forbid the requested endpoints themselves.
     forbidden_nodes.discard(start_idx)
@@ -496,6 +539,8 @@ def _astar_search_one(
     def heuristic(node: int) -> float:
         return heuristic_weight * _distance(model, node, end_idx, dimension) * min_slowness
 
+    # Heap item:
+    #   f_search, search_cost, true_travel_cost, true_turn_cost, node, prev_angle, path_tuple
     heap: list[tuple[float, float, float, float, int, float | None, tuple[int, ...]]] = []
     heapq.heappush(heap, (heuristic(start_idx), 0.0, 0.0, 0.0, start_idx, None, (start_idx,)))
 
@@ -503,7 +548,7 @@ def _astar_search_one(
     expansions = 0
 
     while heap:
-        _f_cost, total_cost, travel_cost, turn_cost, node, prev_angle, path_tuple = heapq.heappop(heap)
+        _f_cost, search_cost, travel_cost, turn_cost, node, prev_angle, path_tuple = heapq.heappop(heap)
         expansions += 1
 
         if expansions > max_expansions:
@@ -511,6 +556,7 @@ def _astar_search_one(
 
         if node == end_idx:
             path = list(path_tuple)
+            total_cost = float(travel_cost + turn_cost)
             return (
                 _build_path_item(
                     model=model,
@@ -545,9 +591,15 @@ def _astar_search_one(
                 delta_angle = _angle_difference_degree(prev_angle, new_angle)
                 step_turn_cost = turn_weight * delta_angle / 180.0
 
+            # Diversity penalty is search-only.  It helps parallel workers find
+            # different valid candidates, then the parent ranks them by true cost.
+            diversity_penalty = 0.0
+            if candidate_diversity_weight > 0.0 and candidate_seed != 0:
+                diversity_penalty = candidate_diversity_weight * _candidate_unit_hash(nb, candidate_seed)
+
             new_travel_cost = travel_cost + step_travel_cost
             new_turn_cost = turn_cost + step_turn_cost
-            new_total_cost = total_cost + step_travel_cost + step_turn_cost
+            new_search_cost = search_cost + step_travel_cost + step_turn_cost + diversity_penalty
 
             bucket = _direction_bucket(new_angle)
             state_key = (nb, bucket)
@@ -556,12 +608,12 @@ def _astar_search_one(
             state_counts[state_key] += 1
 
             new_path_tuple = path_tuple + (nb,)
-            new_f = new_total_cost + heuristic(nb)
+            new_f = new_search_cost + heuristic(nb)
             heapq.heappush(
                 heap,
                 (
                     new_f,
-                    new_total_cost,
+                    new_search_cost,
                     new_travel_cost,
                     new_turn_cost,
                     nb,
@@ -572,6 +624,55 @@ def _astar_search_one(
 
     return None, expansions, "No path found."
 
+
+def _parallel_candidate_worker(args: dict[str, Any]) -> dict[str, Any]:
+    """Worker used by candidate-pool multiprocessing.
+
+    The worker receives the current locked node/edge sets, searches one
+    candidate with its own deterministic diversity seed, and returns the path.
+    """
+    candidate_id = int(args.get("candidate_id", 0))
+    try:
+        model = args["model"]
+        graph = args["graph"]
+        provider = NeighborProvider(model, graph)
+        item, expansions, message = _astar_search_one(
+            model=model,
+            provider=provider,
+            start_idx=int(args["start_idx"]),
+            end_idx=int(args["end_idx"]),
+            dimension=int(args["dimension"]),
+            min_slowness=float(args["min_slowness"]),
+            turn_weight=float(args["turn_weight"]),
+            turn_angle_threshold_degree=float(args["turn_angle_threshold_degree"]),
+            max_expansions=int(args["max_expansions"]),
+            max_states_per_node_direction=int(args["max_states_per_node_direction"]),
+            heuristic_weight=float(args["heuristic_weight"]),
+            use_turn_penalty=bool(args["use_turn_penalty"]),
+            forbidden_nodes=set(args.get("forbidden_nodes", set())),
+            forbidden_edges=set(args.get("forbidden_edges", set())),
+            candidate_seed=int(args.get("candidate_seed", 0)),
+            candidate_diversity_weight=float(args.get("candidate_diversity_weight", 0.0)),
+            verbose=False,
+        )
+        if item is not None:
+            item["candidate_id"] = int(candidate_id)
+            item["candidate_seed"] = int(args.get("candidate_seed", 0))
+        return {
+            "candidate_id": int(candidate_id),
+            "success": item is not None,
+            "item": item,
+            "expanded_states": int(expansions),
+            "message": str(message),
+        }
+    except Exception as exc:
+        return {
+            "candidate_id": int(candidate_id),
+            "success": False,
+            "item": None,
+            "expanded_states": 0,
+            "message": f"Worker failed: {exc}",
+        }
 
 # ============================================================
 # Top-K path search with turn penalty
@@ -595,6 +696,14 @@ def run(
     non_overlap_buffer_radius_m: float = 150.0,
     non_overlap_allowed_prefixes=("DB", "DK", "FLZ"),
     non_overlap_block_edges: bool = True,
+    parallel: bool = False,
+    n_cores: int | None = None,
+    parallel_mode: str = "sequential",
+    candidates_per_round: int = 8,
+    max_rounds_per_path: int = 3,
+    candidate_diversity_weight: float = 0.25,
+    candidate_seed: int = 20260618,
+    max_expansions_per_candidate: int | None = None,
     **kwargs,
 ) -> dict[str, Any]:
     """
@@ -606,10 +715,21 @@ def run(
             nodes or edges.
 
         "non_overlap" / "no_overlap" / "disjoint"
-            Build paths sequentially. After each selected path, its normal grid
-            nodes are blocked for later paths. Overlap remains allowed inside a
-            buffer around start/end and around DB/DK/FLZ service nodes.
+            After each accepted path, lock its normal grid nodes/edges for later
+            paths.  Overlap remains allowed inside a buffer around start/end and
+            around DB/DK/FLZ service nodes.
+
+    parallel_mode:
+        "sequential"
+            Find and lock paths one by one using one process.
+
+        "candidate_pool"
+            For each rank, launch several candidate searches in parallel using
+            the current locked nodes/edges.  The parent process accepts the best
+            valid candidate, then locks that path before the next rank.
     """
+    algorithm_processing_start_time = time.perf_counter()
+
     start_idx = int(start_idx)
     end_idx = int(end_idx)
     k_paths = max(1, int(k_paths))
@@ -619,9 +739,20 @@ def run(
     max_states_per_node_direction = max(1, int(max_states_per_node_direction))
     turn_angle_threshold_degree = float(turn_angle_threshold_degree)
     path_overlap_mode = str(path_overlap_mode or "allow").strip().lower()
+    parallel_mode = str(parallel_mode or "sequential").strip().lower()
     non_overlap_buffer_radius_m = float(non_overlap_buffer_radius_m or 0.0)
     non_overlap_allowed_prefixes = tuple(non_overlap_allowed_prefixes or ())
     non_overlap_block_edges = bool(non_overlap_block_edges)
+    parallel = bool(parallel)
+    candidates_per_round = max(1, int(candidates_per_round or 1))
+    max_rounds_per_path = max(1, int(max_rounds_per_path or 1))
+    candidate_diversity_weight = max(0.0, float(candidate_diversity_weight or 0.0))
+    candidate_seed = int(candidate_seed or 0)
+
+    if max_expansions_per_candidate is None:
+        max_expansions_per_candidate = max_expansions
+    else:
+        max_expansions_per_candidate = max(1, int(max_expansions_per_candidate))
 
     dimension = int(graph.get("dimension", 2))
     provider = NeighborProvider(model, graph)
@@ -645,10 +776,20 @@ def run(
     }
     use_non_overlap = path_overlap_mode in non_overlap_modes
 
+    cpu_count = os.cpu_count() or 1
+    workers_used = 1
+    candidate_pool_round_count = 0
+    candidate_pool_tested_count = 0
+
     # ============================================================
     # Original behavior: enumerate best K paths, allowing overlap.
     # ============================================================
     if not use_non_overlap:
+        if verbose:
+            print("[INFO] path search multiple overlap mode: allow")
+            print("       cores used           : 1")
+            print("       note                 : allow-overlap mode uses one exact top-K heap search")
+
         def heuristic(node: int) -> float:
             return heuristic_weight * _distance(model, node, end_idx, dimension) * min_slowness
 
@@ -666,7 +807,7 @@ def run(
         expansions = 0
 
         while heap and len(found) < k_paths:
-            f_cost, total_cost, travel_cost, turn_cost, node, prev_angle, path_tuple = heapq.heappop(heap)
+            _f_cost, total_cost, travel_cost, turn_cost, node, prev_angle, path_tuple = heapq.heappop(heap)
             expansions += 1
 
             if expansions > max_expansions:
@@ -744,9 +885,10 @@ def run(
         overlap_allowed_nodes_count = 0
         forbidden_nodes_count = 0
         forbidden_edges_count = 0
+        last_message = "allow-overlap search finished"
 
     # ============================================================
-    # New behavior: sequential non-overlapping path population.
+    # Non-overlapping path population.
     # ============================================================
     else:
         allowed_overlap_nodes = _build_allowed_overlap_nodes(
@@ -766,43 +908,170 @@ def run(
         expansions = 0
         last_message = ""
 
+        use_candidate_pool = (
+            parallel
+            and parallel_mode in ("candidate_pool", "pool", "parallel_candidate", "parallel_candidates")
+            and candidates_per_round > 1
+        )
+        workers_used = _resolve_worker_count(
+            parallel=use_candidate_pool,
+            n_cores=n_cores,
+            candidates_per_round=candidates_per_round,
+        )
+
         if verbose:
             print("[INFO] path search multiple overlap mode: non_overlap")
             print(f"       allowed overlap buffer : {non_overlap_buffer_radius_m:.2f} m")
             print(f"       allowed prefixes       : {non_overlap_allowed_prefixes}")
             print(f"       allowed overlap nodes   : {len(allowed_overlap_nodes):,}")
+            print("[INFO] CPU / parallel search:")
+            print(f"       machine CPU count      : {cpu_count}")
+            print(f"       parallel requested     : {parallel}")
+            print(f"       parallel mode          : {parallel_mode}")
+            print(f"       cores used             : {workers_used}")
+            if use_candidate_pool:
+                print(f"       candidates per round   : {candidates_per_round}")
+                print(f"       max rounds per path    : {max_rounds_per_path}")
+                print(f"       diversity weight       : {candidate_diversity_weight:.6g}")
+            else:
+                print("       reason                 : sequential non-overlap locking")
 
         for rank in range(1, k_paths + 1):
-            remaining_expansions = max(1, max_expansions - expansions)
-            item, used_expansions, message = _astar_search_one(
-                model=model,
-                provider=provider,
-                start_idx=start_idx,
-                end_idx=end_idx,
-                dimension=dimension,
-                min_slowness=min_slowness,
-                turn_weight=turn_weight,
-                turn_angle_threshold_degree=turn_angle_threshold_degree,
-                max_expansions=remaining_expansions,
-                max_states_per_node_direction=max_states_per_node_direction,
-                heuristic_weight=heuristic_weight,
-                use_turn_penalty=use_turn_penalty,
-                forbidden_nodes=forbidden_nodes,
-                forbidden_edges=forbidden_edges if non_overlap_block_edges else set(),
-                verbose=verbose,
-            )
-            expansions += int(used_expansions)
-            last_message = str(message)
+            accepted_item = None
+            accepted_message = "No candidate accepted."
+            accepted_expansions = 0
+            accepted_round = 0
 
-            if item is None:
+            if use_candidate_pool:
+                for round_id in range(1, max_rounds_per_path + 1):
+                    candidate_pool_round_count += 1
+                    accepted_round = int(round_id)
+                    round_seed_base = candidate_seed + rank * 100_000 + round_id * 10_000
+                    round_results = []
+
+                    remaining_expansions = max(1, max_expansions - expansions)
+                    per_candidate_expansions = min(
+                        int(max_expansions_per_candidate),
+                        int(remaining_expansions),
+                    )
+                    if per_candidate_expansions <= 0:
+                        break
+
+                    candidate_args = []
+                    for candidate_id in range(candidates_per_round):
+                        # Candidate 0 is always the exact no-diversity search.
+                        if candidate_id == 0 and round_id == 1:
+                            this_diversity_weight = 0.0
+                            this_seed = 0
+                        else:
+                            # Later rounds gradually increase the search-only diversity.
+                            this_diversity_weight = candidate_diversity_weight * float(round_id)
+                            this_seed = round_seed_base + candidate_id
+
+                        candidate_args.append({
+                            "candidate_id": int(candidate_id),
+                            "model": model,
+                            "graph": graph,
+                            "start_idx": int(start_idx),
+                            "end_idx": int(end_idx),
+                            "dimension": int(dimension),
+                            "min_slowness": float(min_slowness),
+                            "turn_weight": float(turn_weight),
+                            "turn_angle_threshold_degree": float(turn_angle_threshold_degree),
+                            "max_expansions": int(per_candidate_expansions),
+                            "max_states_per_node_direction": int(max_states_per_node_direction),
+                            "heuristic_weight": float(heuristic_weight),
+                            "use_turn_penalty": bool(use_turn_penalty),
+                            "forbidden_nodes": set(forbidden_nodes),
+                            "forbidden_edges": set(forbidden_edges) if non_overlap_block_edges else set(),
+                            "candidate_seed": int(this_seed),
+                            "candidate_diversity_weight": float(this_diversity_weight),
+                        })
+
+                    candidate_pool_tested_count += len(candidate_args)
+
+                    try:
+                        with ProcessPoolExecutor(max_workers=workers_used) as executor:
+                            future_map = {
+                                executor.submit(_parallel_candidate_worker, args): args["candidate_id"]
+                                for args in candidate_args
+                            }
+                            for future in as_completed(future_map):
+                                round_results.append(future.result())
+                    except Exception as exc:
+                        if verbose:
+                            print(
+                                "[WARNING] multiprocessing candidate pool failed; "
+                                f"falling back to sequential candidates. Reason: {exc}"
+                            )
+                        round_results = [_parallel_candidate_worker(args) for args in candidate_args]
+                        workers_used = 1
+
+                    accepted_expansions += int(sum(r.get("expanded_states", 0) for r in round_results))
+                    valid_items = []
+                    for r in round_results:
+                        item = r.get("item")
+                        if not item:
+                            continue
+                        path_tuple = tuple(int(i) for i in item.get("path_indices", []))
+                        if not path_tuple or path_tuple in found_path_set:
+                            continue
+                        valid_items.append(item)
+
+                    if valid_items:
+                        valid_items.sort(
+                            key=lambda item: (
+                                float(item.get("total_cost", float("inf"))),
+                                int(item.get("turn_count", 10**9)),
+                                int(item.get("nodes", 10**9)),
+                                int(item.get("candidate_id", 10**9)),
+                            )
+                        )
+                        accepted_item = valid_items[0]
+                        accepted_message = "Accepted best candidate from parallel pool."
+                        break
+
+                    if verbose:
+                        messages = [str(r.get("message", "")) for r in round_results[:3]]
+                        print(
+                            f"[INFO] rank {rank:03d}: candidate round {round_id}/{max_rounds_per_path} "
+                            f"found no usable path. Examples: {messages}"
+                        )
+
+            else:
+                remaining_expansions = max(1, max_expansions - expansions)
+                accepted_item, accepted_expansions, accepted_message = _astar_search_one(
+                    model=model,
+                    provider=provider,
+                    start_idx=start_idx,
+                    end_idx=end_idx,
+                    dimension=dimension,
+                    min_slowness=min_slowness,
+                    turn_weight=turn_weight,
+                    turn_angle_threshold_degree=turn_angle_threshold_degree,
+                    max_expansions=remaining_expansions,
+                    max_states_per_node_direction=max_states_per_node_direction,
+                    heuristic_weight=heuristic_weight,
+                    use_turn_penalty=use_turn_penalty,
+                    forbidden_nodes=forbidden_nodes,
+                    forbidden_edges=forbidden_edges if non_overlap_block_edges else set(),
+                    candidate_seed=0,
+                    candidate_diversity_weight=0.0,
+                    verbose=verbose,
+                )
+
+            expansions += int(accepted_expansions)
+            last_message = str(accepted_message)
+
+            if accepted_item is None:
                 if verbose:
                     print(
                         f"[WARNING] path search non-overlap stopped at rank {rank:03d}/{k_paths}: "
-                        f"{message}"
+                        f"{accepted_message}"
                     )
                 break
 
-            path_tuple = tuple(int(i) for i in item["path_indices"])
+            path_tuple = tuple(int(i) for i in accepted_item["path_indices"])
             if path_tuple in found_path_set:
                 if verbose:
                     print(
@@ -810,31 +1079,39 @@ def run(
                     )
                 break
 
-            item["rank"] = int(rank)
+            accepted_item["rank"] = int(rank)
+            accepted_item["candidate_round"] = int(accepted_round)
             found_path_set.add(path_tuple)
-            found.append(item)
+            found.append(accepted_item)
 
             newly_blocked_nodes = _blocked_nodes_from_path(
-                item["path_indices"],
+                accepted_item["path_indices"],
                 allowed_overlap_nodes=allowed_overlap_nodes,
             )
             forbidden_nodes.update(newly_blocked_nodes)
 
             if non_overlap_block_edges:
                 newly_blocked_edges = _blocked_edges_from_path(
-                    item["path_indices"],
+                    accepted_item["path_indices"],
                     allowed_overlap_nodes=allowed_overlap_nodes,
                 )
                 forbidden_edges.update(newly_blocked_edges)
 
             if verbose:
+                candidate_info = ""
+                if use_candidate_pool:
+                    candidate_info = (
+                        f", candidate={accepted_item.get('candidate_id', 'NA')}, "
+                        f"round={accepted_item.get('candidate_round', 'NA')}"
+                    )
                 print(
                     f"[OK] path {rank:03d}/{k_paths}: "
-                    f"total={item['total_cost']:.6g}, "
-                    f"travel={item['travel_cost']:.6g}, "
-                    f"turn={item['turn_cost']:.6g}, "
-                    f"turns={item['turn_count']}, nodes={item['nodes']}, "
+                    f"total={accepted_item['total_cost']:.6g}, "
+                    f"travel={accepted_item['travel_cost']:.6g}, "
+                    f"turn={accepted_item['turn_cost']:.6g}, "
+                    f"turns={accepted_item['turn_count']}, nodes={accepted_item['nodes']}, "
                     f"blocked_nodes_for_next={len(forbidden_nodes):,}"
+                    f"{candidate_info}"
                 )
 
             if expansions >= max_expansions:
@@ -854,7 +1131,7 @@ def run(
             "ranked_paths": [],
             "total_cost": None,
             "success": False,
-            "message": "No path found.",
+            "message": f"No path found. {last_message}",
             "k_paths_requested": int(k_paths),
             "k_paths_found": 0,
             "expanded_states": int(expansions),
@@ -866,6 +1143,16 @@ def run(
             "non_overlap_allowed_nodes": int(overlap_allowed_nodes_count),
             "non_overlap_forbidden_nodes": int(forbidden_nodes_count),
             "non_overlap_forbidden_edges": int(forbidden_edges_count),
+            "parallel": bool(parallel),
+            "parallel_mode": str(parallel_mode),
+            "cpu_count": int(cpu_count),
+            "cores_used": int(workers_used),
+            "candidates_per_round": int(candidates_per_round),
+            "max_rounds_per_path": int(max_rounds_per_path),
+            "candidate_pool_round_count": int(candidate_pool_round_count),
+            "candidate_pool_tested_count": int(candidate_pool_tested_count),
+            "candidate_diversity_weight": float(candidate_diversity_weight),
+            "algorithm_processing_time_s": float(time.perf_counter() - algorithm_processing_start_time),
         }
 
     best = found[0]
@@ -896,4 +1183,14 @@ def run(
         "non_overlap_allowed_nodes": int(overlap_allowed_nodes_count),
         "non_overlap_forbidden_nodes": int(forbidden_nodes_count),
         "non_overlap_forbidden_edges": int(forbidden_edges_count),
+        "parallel": bool(parallel),
+        "parallel_mode": str(parallel_mode),
+        "cpu_count": int(cpu_count),
+        "cores_used": int(workers_used),
+        "candidates_per_round": int(candidates_per_round),
+        "max_rounds_per_path": int(max_rounds_per_path),
+        "candidate_pool_round_count": int(candidate_pool_round_count),
+        "candidate_pool_tested_count": int(candidate_pool_tested_count),
+        "candidate_diversity_weight": float(candidate_diversity_weight),
+        "algorithm_processing_time_s": float(time.perf_counter() - algorithm_processing_start_time),
     }

@@ -34,6 +34,7 @@ import inspect
 import json
 import sys
 import math
+import time
 
 import numpy as np
 import pandas as pd
@@ -66,6 +67,30 @@ from src.cleanup import cleanup_intermediate_files, print_cleanup_summary
 
 def get_param(name, default=None):
     return getattr(parameter, name, default)
+
+
+def format_elapsed_time(seconds):
+    """Return a compact human-readable elapsed-time string."""
+    seconds = float(seconds or 0.0)
+    if seconds < 60.0:
+        return f"{seconds:.2f} s"
+
+    minutes, sec = divmod(seconds, 60.0)
+    if minutes < 60.0:
+        return f"{int(minutes)} min {sec:.2f} s"
+
+    hours, minutes = divmod(minutes, 60.0)
+    return f"{int(hours)} h {int(minutes)} min {sec:.2f} s"
+
+
+def maybe_write_processing_time_json(output_file: Path, data: dict) -> None:
+    """Write timing metadata without interrupting the pathfinding workflow."""
+    try:
+        output_file = Path(output_file)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        print(f"[WARNING] Could not write processing-time JSON: {exc}")
 
 
 # Internal label prefix used only while building the graph.
@@ -860,6 +885,11 @@ def normalize_algorithm_names(value):
 
 
 def run_one_algorithm(algorithm_name):
+    run_total_start_time = time.perf_counter()
+    algorithm_search_elapsed_s = 0.0
+    print_processing_time = bool(get_param("PRINT_PROCESSING_TIME", True))
+    save_processing_time_json = bool(get_param("SAVE_PROCESSING_TIME_JSON", True))
+
     algorithm_name = str(algorithm_name).strip().lower()
     if not algorithm_name:
         raise ValueError("Empty algorithm name in ALGORITHM list.")
@@ -1580,12 +1610,29 @@ def run_one_algorithm(algorithm_name):
             },
             rank_selection=plot_multiple_ranks,
         )
+        run_total_elapsed_s = time.perf_counter() - run_total_start_time
+        timing_summary = {
+            "algorithm": str(algorithm_name),
+            "run_mode": "plot_only",
+            "processing_time_total_s": float(run_total_elapsed_s),
+            "processing_time_total_text": format_elapsed_time(run_total_elapsed_s),
+            "plotted_files_count": int(len(plotted_files)),
+        }
+        if save_processing_time_json:
+            timing_file = output_dir / f"{path_name}_{algorithm_name}_processing_time.json"
+            maybe_write_processing_time_json(timing_file, timing_summary)
+
         print("=" * 70)
         print("PLOT ONLY DONE")
         print("=" * 70)
         for f in plotted_files:
             print(f"  figure: {f}")
-        return
+        if print_processing_time:
+            print("Processing time:")
+            print(f"  total: {format_elapsed_time(run_total_elapsed_s)}")
+            if save_processing_time_json:
+                print(f"  timing file: {timing_file}")
+        return timing_summary
 
     # ============================================================
     # 4. Run algorithm
@@ -1636,6 +1683,22 @@ def run_one_algorithm(algorithm_name):
 
         "parallel": bool(get_param("MULTI_PATH_PARALLEL", True)),
         "n_cores": get_param("MULTI_PATH_N_CORES", None),
+        "parallel_mode": str(get_param("MULTI_PATH_PARALLEL_MODE", "sequential")),
+        "candidates_per_round": int(
+            get_param("MULTI_PATH_CANDIDATES_PER_ROUND", 8)
+        ),
+        "max_rounds_per_path": int(
+            get_param("MULTI_PATH_MAX_ROUNDS_PER_PATH", 3)
+        ),
+        "candidate_diversity_weight": float(
+            get_param("MULTI_PATH_CANDIDATE_DIVERSITY_WEIGHT", 0.25)
+        ),
+        "candidate_seed": int(
+            get_param("MULTI_PATH_CANDIDATE_SEED", 20260618)
+        ),
+        "max_expansions_per_candidate": get_param(
+            "MULTI_PATH_MAX_EXPANSIONS_PER_CANDIDATE", None
+        ),
     }
 
     # Only pass parameters accepted by the selected algorithm.
@@ -1650,6 +1713,7 @@ def run_one_algorithm(algorithm_name):
             if key in run_signature.parameters
         }
 
+    algorithm_search_start_time = time.perf_counter()
     result = alg_module.run(
         model=model,
         graph=graph,
@@ -1657,6 +1721,14 @@ def run_one_algorithm(algorithm_name):
         end_idx=search_end_idx,
         **accepted_algorithm_kwargs,
     )
+    algorithm_search_elapsed_s = time.perf_counter() - algorithm_search_start_time
+
+    result["algorithm_search_time_s"] = float(algorithm_search_elapsed_s)
+    result["algorithm_search_time_text"] = format_elapsed_time(algorithm_search_elapsed_s)
+
+    if print_processing_time:
+        print("      Algorithm search time:")
+        print(f"        {format_elapsed_time(algorithm_search_elapsed_s)}")
 
     algorithm_path_indices = result.get("path_indices", [])
 
@@ -1682,6 +1754,17 @@ def run_one_algorithm(algorithm_name):
 
         result["start_neighbors"] = int(start_n_neighbors)
         result["end_neighbors"] = int(end_n_neighbors)
+
+        run_total_elapsed_s = time.perf_counter() - run_total_start_time
+        result["processing_time_total_s"] = float(run_total_elapsed_s)
+        result["processing_time_total_text"] = format_elapsed_time(run_total_elapsed_s)
+        result["algorithm_search_time_s"] = float(algorithm_search_elapsed_s)
+        result["algorithm_search_time_text"] = format_elapsed_time(algorithm_search_elapsed_s)
+
+        if print_processing_time:
+            print("      Processing time before failure:")
+            print(f"        total            : {format_elapsed_time(run_total_elapsed_s)}")
+            print(f"        algorithm search : {format_elapsed_time(algorithm_search_elapsed_s)}")
 
         fail_file = output_dir / f"{path_name}_{algorithm_name}_FAILED.json"
         fail_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -1774,6 +1857,10 @@ def run_one_algorithm(algorithm_name):
     print(f"        output distance          : {output_path_metrics['distance_traveled_km']:.4f} km")
     print(f"        output traveltime        : {output_path_metrics['estimated_traveltime_s']:.2f} s")
     print(f"        output traveltime        : {output_path_metrics['estimated_traveltime_min']:.2f} min")
+
+    processing_time_until_export_s = time.perf_counter() - run_total_start_time
+    result["processing_time_until_export_s"] = float(processing_time_until_export_s)
+    result["processing_time_until_export_text"] = format_elapsed_time(processing_time_until_export_s)
 
     # ============================================================
     # 5. Export path footprint files
@@ -2057,19 +2144,54 @@ def run_one_algorithm(algorithm_name):
     # ============================================================
     # Final print
     # ============================================================
+    run_total_elapsed_s = time.perf_counter() - run_total_start_time
+    result["processing_time_total_s"] = float(run_total_elapsed_s)
+    result["processing_time_total_text"] = format_elapsed_time(run_total_elapsed_s)
+    result["algorithm_search_time_s"] = float(algorithm_search_elapsed_s)
+    result["algorithm_search_time_text"] = format_elapsed_time(algorithm_search_elapsed_s)
+
+    timing_summary = {
+        "algorithm": str(algorithm_name),
+        "run_mode": str(run_mode),
+        "success": bool(result.get("success", True)),
+        "k_paths_requested": int(result.get("k_paths_requested", 1)),
+        "k_paths_found": int(result.get("k_paths_found", 1 if result.get("path_indices") else 0)),
+        "expanded_states": int(result.get("expanded_states", 0)),
+        "algorithm_search_time_s": float(algorithm_search_elapsed_s),
+        "algorithm_search_time_text": format_elapsed_time(algorithm_search_elapsed_s),
+        "processing_time_total_s": float(run_total_elapsed_s),
+        "processing_time_total_text": format_elapsed_time(run_total_elapsed_s),
+    }
+
+    if save_processing_time_json:
+        timing_file = output_dir / f"{path_name}_{algorithm_name}_processing_time.json"
+        maybe_write_processing_time_json(timing_file, timing_summary)
+        exported["processing_time_json"] = str(timing_file)
+
     print("=" * 70)
     print("DONE")
     print("=" * 70)
 
     print("Exported path files:")
     for key, value in exported.items():
-        print(f"  {key:12s}: {value}")
+        print(f"  {key:20s}: {value}")
 
     print(f"Initiate figure : {initiate_figure_file}")
     print(f"Report figure   : {report_figure_file}")
 
+    if print_processing_time:
+        print("Processing time:")
+        print(f"  algorithm search : {format_elapsed_time(algorithm_search_elapsed_s)}")
+        print(f"  total workflow   : {format_elapsed_time(run_total_elapsed_s)}")
+        if save_processing_time_json:
+            print(f"  timing file      : {timing_file}")
+
+    return timing_summary
+
 
 def main():
+    batch_start_time = time.perf_counter()
+    print_processing_time = bool(get_param("PRINT_PROCESSING_TIME", True))
 
     # ============================================================
     # Possible DB/DK path connection calculation
@@ -2095,6 +2217,7 @@ def main():
     print("=" * 70)
 
     failed = []
+    algorithm_timing_summaries = []
     stop_on_failure = bool(get_param("STOP_ON_ALGORITHM_FAILURE", False))
 
     for i, algorithm_name in enumerate(algorithms, start=1):
@@ -2102,17 +2225,46 @@ def main():
         print(f"RUN {i}/{len(algorithms)}: {algorithm_name}")
         print("#" * 70)
 
+        algorithm_loop_start_time = time.perf_counter()
         try:
-            run_one_algorithm(algorithm_name)
+            timing_summary = run_one_algorithm(algorithm_name)
+            algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
+            if isinstance(timing_summary, dict):
+                algorithm_timing_summaries.append(timing_summary)
+            else:
+                algorithm_timing_summaries.append({
+                    "algorithm": str(algorithm_name),
+                    "processing_time_total_s": float(algorithm_loop_elapsed_s),
+                    "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
+                })
         except SystemExit:
+            algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
             failed.append(algorithm_name)
+            algorithm_timing_summaries.append({
+                "algorithm": str(algorithm_name),
+                "success": False,
+                "processing_time_total_s": float(algorithm_loop_elapsed_s),
+                "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
+            })
             print(f"[FAILED] Algorithm failed: {algorithm_name}")
+            if print_processing_time:
+                print(f"Processing time before failure: {format_elapsed_time(algorithm_loop_elapsed_s)}")
             if stop_on_failure:
                 raise
         except Exception as exc:
+            algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
             failed.append(algorithm_name)
+            algorithm_timing_summaries.append({
+                "algorithm": str(algorithm_name),
+                "success": False,
+                "processing_time_total_s": float(algorithm_loop_elapsed_s),
+                "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
+                "error": str(exc),
+            })
             print(f"[FAILED] Algorithm failed: {algorithm_name}")
             print(f"Reason: {exc}")
+            if print_processing_time:
+                print(f"Processing time before failure: {format_elapsed_time(algorithm_loop_elapsed_s)}")
             if stop_on_failure:
                 raise
 
@@ -2126,6 +2278,21 @@ def main():
             sys.exit(1)
     else:
         print("All algorithms completed successfully.")
+
+    if print_processing_time:
+        batch_elapsed_s = time.perf_counter() - batch_start_time
+        print("Processing time summary:")
+        for item in algorithm_timing_summaries:
+            name = item.get("algorithm", "unknown")
+            total_text = item.get("processing_time_total_text")
+            if total_text is None:
+                total_text = format_elapsed_time(item.get("processing_time_total_s", 0.0))
+            search_text = item.get("algorithm_search_time_text", None)
+            if search_text:
+                print(f"  {name:20s}: total={total_text}, search={search_text}")
+            else:
+                print(f"  {name:20s}: total={total_text}")
+        print(f"  {'batch total':20s}: {format_elapsed_time(batch_elapsed_s)}")
 
 
 if __name__ == "__main__":
