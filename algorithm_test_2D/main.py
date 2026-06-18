@@ -901,7 +901,7 @@ def run_one_algorithm(algorithm_name):
     #
     # Example:
     #   ALGORITHM = ["dijkstra", "astar_multiple"]
-    #   A_STAR_K_PATHS = 100
+    #   MULTI_PATH_K_PATHS = 100
     # gives:
     #   output/dat/senario1/dijkstra/
     #   output/dat/senario1/astar/multiple/100/
@@ -915,7 +915,7 @@ def run_one_algorithm(algorithm_name):
     multiple_run_value = int(
         get_param(
             "MULTIPLE_OUTPUT_VALUE",
-            get_param("A_STAR_K_PATHS", 100),
+            get_param("MULTI_PATH_K_PATHS", 100),
         )
     )
 
@@ -1103,6 +1103,9 @@ def run_one_algorithm(algorithm_name):
 
     plot_multiple_ranked_paths = bool(get_param("PLOT_MULTIPLE_RANKED_PATHS", True))
     plot_multiple_ranks = parse_rank_selection(get_param("PLOT_MULTIPLE_RANKS", "all"))
+    plot_multiple_max_rank = get_param("PLOT_MULTIPLE_MAX_RANK", None)
+    if plot_multiple_max_rank is not None:
+        plot_multiple_max_rank = int(plot_multiple_max_rank)
     # ============================================================
     # Cleanup settings
     # ============================================================
@@ -1602,21 +1605,37 @@ def run_one_algorithm(algorithm_name):
         )
 
     algorithm_kwargs = {
-        "k_paths": int(get_param("A_STAR_K_PATHS", 1)),
-        "turn_weight": float(get_param("A_STAR_TURN_WEIGHT", 0.0)),
+        "k_paths": int(get_param("MULTI_PATH_K_PATHS", 1)),
+        "turn_weight": float(get_param("MULTI_PATH_TURN_WEIGHT", 0.0)),
         "turn_angle_threshold_degree": float(
-            get_param("A_STAR_TURN_ANGLE_THRESHOLD_DEGREE", 1.0)
+            get_param("MULTI_PATH_TURN_ANGLE_THRESHOLD_DEGREE", 1.0)
         ),
-        "max_expansions": int(get_param("A_STAR_MAX_EXPANSIONS", 5_000_000)),
+        "max_expansions": int(get_param("MULTI_PATH_MAX_EXPANSIONS", 5_000_000)),
         "max_states_per_node_direction": int(
-            get_param("A_STAR_MAX_STATES_PER_NODE_DIRECTION", 150)
+            get_param("MULTI_PATH_MAX_STATES_PER_NODE_DIRECTION", 150)
         ),
-        "heuristic_weight": float(get_param("A_STAR_HEURISTIC_WEIGHT", 1.0)),
-        "use_turn_penalty": bool(get_param("A_STAR_USE_TURN_PENALTY", True)),
-        "save_all_k_paths": bool(get_param("A_STAR_SAVE_ALL_K_PATHS", True)),
-        "verbose": bool(get_param("A_STAR_VERBOSE", True)),
-        "parallel": bool(get_param("A_STAR_PARALLEL", True)),
-        "n_cores": get_param("A_STAR_N_CORES", None),
+        "heuristic_weight": float(get_param("MULTI_PATH_HEURISTIC_WEIGHT", 1.0)),
+        "use_turn_penalty": bool(get_param("MULTI_PATH_USE_TURN_PENALTY", True)),
+        "save_all_k_paths": bool(get_param("MULTI_PATH_SAVE_ALL_K_PATHS", True)),
+        "verbose": bool(get_param("MULTI_PATH_VERBOSE", True)),
+
+        # Multiple-path overlap control.
+        # MULTI_PATH_OVERLAP_MODE = "allow"       -> old behavior; paths may share nodes/edges.
+        # MULTI_PATH_OVERLAP_MODE = "non_overlap" -> later paths cannot reuse previous path
+        #                                             nodes/edges except inside start/end/DB/DK/FLZ buffers.
+        "path_overlap_mode": str(get_param("MULTI_PATH_OVERLAP_MODE", "allow")),
+        "non_overlap_buffer_radius_m": float(
+            get_param("MULTI_PATH_NON_OVERLAP_BUFFER_RADIUS_M", 150.0)
+        ),
+        "non_overlap_allowed_prefixes": tuple(
+            get_param("MULTI_PATH_NON_OVERLAP_ALLOWED_PREFIXES", ("DB", "DK", "FLZ"))
+        ),
+        "non_overlap_block_edges": bool(
+            get_param("MULTI_PATH_NON_OVERLAP_BLOCK_EDGES", True)
+        ),
+
+        "parallel": bool(get_param("MULTI_PATH_PARALLEL", True)),
+        "n_cores": get_param("MULTI_PATH_N_CORES", None),
     }
 
     # Only pass parameters accepted by the selected algorithm.
@@ -1780,10 +1799,10 @@ def run_one_algorithm(algorithm_name):
         )
 
 
-    # Optional: export all K A* paths when src/astar.py returns path_results.
+    # Optional: export all K multiple paths when a multiple-path algorithm returns path_results.
     # The first path is still exported above using the original name for backward compatibility.
     all_path_results = result.get("path_results", [])
-    save_all_k_paths = bool(get_param("A_STAR_SAVE_ALL_K_PATHS", True))
+    save_all_k_paths = bool(get_param("MULTI_PATH_SAVE_ALL_K_PATHS", True))
     exported_k_paths = []
 
     if save_all_k_paths and len(all_path_results) > 1:
@@ -1903,52 +1922,83 @@ def run_one_algorithm(algorithm_name):
     # ============================================================
     print("[6/6] Plotting path report...")
 
-    ranked_paths = result.get("ranked_paths", None)
+    # Always write the best-path report.  For astar_multiple this keeps the
+    # normal report filename while the combined ranked-path figure is written
+    # as an extra diagnostic below.
+    plot_path_report(
+        model=model,
+        path_indices=path_indices,
+        figure_file=report_figure_file,
+        algorithm_name=algorithm_name,
+        max_model_points=plot_max_model_points,
+        dpi=plot_dpi,
+        model_alpha=plot_model_alpha,
+        model_marker_size=plot_model_marker_size,
+        path_line_width=plot_path_line_width,
+        plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+        plot_no_fly_prefixes=plot_no_fly_prefixes,
+        plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+        plot_show_flz_overlay=plot_show_flz_overlay,
+        always_flyable_prefixes=plot_always_flyable_prefixes,
+        result=result if plot_report_text_box else None,
+    )
 
-    if ranked_paths:
-        multiple_figure_file = (
-            algorithm_figure_dir
-            / f"path_report_{algorithm_name}_all_ranks_from_{safe_start_label}_to_{safe_end_label}.png"
-        )
+    # astar_multiple returns paths in result["path_results"].  Older code
+    # looked only for result["ranked_paths"], so the combined multiple-path
+    # figure was skipped even though the ranked CSV files were exported.
+    ranked_paths = result.get("ranked_paths", None) or result.get("path_results", None)
 
-        plot_multiple_paths_report(
-            model=model,
-            ranked_paths=ranked_paths,
-            figure_file=multiple_figure_file,
-            algorithm_name=algorithm_name,
-            max_model_points=plot_max_model_points,
-            dpi=plot_dpi,
-            model_alpha=plot_model_alpha,
-            model_marker_size=plot_model_marker_size,
-            path_line_width=plot_path_line_width,
-            plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
-            plot_no_fly_prefixes=plot_no_fly_prefixes,
-            plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
-            plot_show_flz_overlay=plot_show_flz_overlay,
-            always_flyable_prefixes=plot_always_flyable_prefixes,
-            result=result if plot_report_text_box else None,
-        )
+    if (
+        is_multiple_algorithm
+        and plot_multiple_ranked_paths
+        and ranked_paths
+        and len(ranked_paths) > 1
+    ):
+        selected_ranked_paths = []
+        wanted_ranks = None if plot_multiple_ranks == "all" else {int(r) for r in plot_multiple_ranks}
 
-        print(f"      Multiple-path plot: {multiple_figure_file}")
+        for item in ranked_paths:
+            rank = int(item.get("rank", len(selected_ranked_paths) + 1))
+            if plot_multiple_max_rank is not None and rank > plot_multiple_max_rank:
+                continue
+            if wanted_ranks is not None and rank not in wanted_ranks:
+                continue
 
-    else:
-        plot_path_report(
-            model=model,
-            path_indices=path_indices,
-            figure_file=report_figure_file,
-            algorithm_name=algorithm_name,
-            max_model_points=plot_max_model_points,
-            dpi=plot_dpi,
-            model_alpha=plot_model_alpha,
-            model_marker_size=plot_model_marker_size,
-            path_line_width=plot_path_line_width,
-            plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
-            plot_no_fly_prefixes=plot_no_fly_prefixes,
-            plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
-            plot_show_flz_overlay=plot_show_flz_overlay,
-            always_flyable_prefixes=plot_always_flyable_prefixes,
-            result=result if plot_report_text_box else None,
-        )
+            item_for_plot = dict(item)
+            item_for_plot["path_indices"] = add_real_start_end_to_path(
+                path_indices=item.get("path_indices", []),
+                real_start_idx=start_idx,
+                real_end_idx=end_idx,
+                include=include_real_start_end,
+            )
+            selected_ranked_paths.append(item_for_plot)
+
+        if selected_ranked_paths:
+            multiple_figure_file = (
+                algorithm_figure_dir
+                / f"path_report_{algorithm_name}_all_ranks_from_{safe_start_label}_to_{safe_end_label}.png"
+            )
+
+            plot_multiple_paths_report(
+                model=model,
+                ranked_paths=selected_ranked_paths,
+                figure_file=multiple_figure_file,
+                algorithm_name=algorithm_name,
+                max_model_points=plot_max_model_points,
+                dpi=plot_dpi,
+                model_alpha=plot_model_alpha,
+                model_marker_size=plot_model_marker_size,
+                path_line_width=plot_path_line_width,
+                plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+                plot_no_fly_prefixes=plot_no_fly_prefixes,
+                plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+                plot_show_flz_overlay=plot_show_flz_overlay,
+                always_flyable_prefixes=plot_always_flyable_prefixes,
+                result=result if plot_report_text_box else None,
+            )
+
+            exported["multiple_path_figure"] = str(multiple_figure_file)
+            print(f"      Multiple-path plot: {multiple_figure_file}")
 
     # ============================================================
     # ZOOM. Plot path-corridor diagnostic for adjacent-node checking

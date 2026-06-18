@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_astar_multiple",
+  "algorithm": "astar_multiple",
+  "success": true,
+  "message": "Found 3 path(s).",
+  "path_nodes": 28,
+  "total_cost": 7.5082413628555535,
+  "expanded_nodes": null,
+  "visited_nodes": null,
+  "runtime_seconds": null,
+  "start": {
+    "x": 105.5421057,
+    "y": 20.99979136,
+    "z": 0.0,
+    "label": "DB01"
+  },
+  "end": {
+    "x": 105.53087943,
+    "y": 21.00921067,
+    "z": 0.0,
+    "label": "DK01"
+  },
+  "algorithm_path_distance_m": 1743.0226443220963,
+  "algorithm_path_distance_km": 1.7430226443220964,
+  "algorithm_estimated_traveltime_s": 66.3415481888236,
+  "algorithm_estimated_traveltime_min": 1.1056924698137265,
+  "output_path_distance_m": 1743.0226443220963,
+  "output_path_distance_km": 1.7430226443220964,
+  "output_estimated_traveltime_s": 66.3415481888236,
+  "output_estimated_traveltime_min": 1.1056924698137265
+}

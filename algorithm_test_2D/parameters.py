@@ -59,7 +59,7 @@ RUN_MODE = "full"
 # Master switch:
 # True  = calculate possible DB/DK/DK-DK path connections and plot figure
 # False = skip this step completely in main.py
-RUN_POSSIBLE_PATH_CALCULATION = True
+RUN_POSSIBLE_PATH_CALCULATION = False
 
 
 SCENARIO_NAME = "senario1"
@@ -142,8 +142,8 @@ PATH_STATUS_BOX_LOCATION = "upper right"
 # Multiple-path algorithm naming rule:
 #     src/astar_multiple.py -> output folder:
 #     astar/multiple/{MULTIPLE_OUTPUT_VALUE}/
-ALGORITHM = ["thetastar"]
-# ALGORITHM = ["astar","thetastar"]
+ALGORITHM = ["astar_multiple"]
+# ALGORITHM = ["astar", "astar_multiple"]
 
 # If False, continue to the next algorithm if one fails.
 STOP_ON_ALGORITHM_FAILURE = False
@@ -170,20 +170,20 @@ END_COORD = None
 # ============================================================
 
 # Number of fastest paths to RUN in full mode, or to PLOT in plot_only mode.
-A_STAR_K_PATHS = 10
+MULTI_PATH_K_PATHS = 10
 
 # Folder value to read/write for multiple runs.
 #
 # Example:
-#     A_STAR_K_PATHS = 10
-#     MULTIPLE_OUTPUT_VALUE = 100
+#     MULTI_PATH_K_PATHS = 10
+#     MULTIPLE_OUTPUT_VALUE = MULTI_PATH_K_PATHS
 #
 # means:
 #     plot/read only fastest 10 paths from old folder multiple/100/
-MULTIPLE_OUTPUT_VALUE = 100
+MULTIPLE_OUTPUT_VALUE = MULTI_PATH_K_PATHS
 
 # In plot_only mode, limit combined plot to ranks <= this value.
-PLOT_MULTIPLE_MAX_RANK = A_STAR_K_PATHS
+PLOT_MULTIPLE_MAX_RANK = MULTI_PATH_K_PATHS
 
 # "all" means use all ranks after applying PLOT_MULTIPLE_MAX_RANK.
 # Or use a list, for example:
@@ -199,30 +199,56 @@ PLOT_MULTIPLE_RANKED_PATHS = True
 # ============================================================
 
 PLOT_MULTIPLE_TIME_HISTOGRAM = True
-PLOT_MULTIPLE_TIME_HISTOGRAM_FASTEST_N = A_STAR_K_PATHS
+PLOT_MULTIPLE_TIME_HISTOGRAM_FASTEST_N = MULTI_PATH_K_PATHS
 PLOT_MULTIPLE_TIME_HISTOGRAM_BINS = 20
 
 
 # ============================================================
-# A* / astar_multiple settings
+# Generic path-search / multiple-path settings
 # ============================================================
 
-A_STAR_USE_TURN_PENALTY = True
-A_STAR_TURN_WEIGHT = 10.0
-A_STAR_TURN_ANGLE_THRESHOLD_DEGREE = 1.0
+MULTI_PATH_USE_TURN_PENALTY = True
+MULTI_PATH_TURN_WEIGHT = 10.0
+MULTI_PATH_TURN_ANGLE_THRESHOLD_DEGREE = 1.0
 
-A_STAR_MAX_EXPANSIONS = 5_000_000
-A_STAR_MAX_STATES_PER_NODE_DIRECTION = 150
-A_STAR_HEURISTIC_WEIGHT = 1.0
+MULTI_PATH_MAX_EXPANSIONS = 5_000_000
+MULTI_PATH_MAX_STATES_PER_NODE_DIRECTION = 150
+MULTI_PATH_HEURISTIC_WEIGHT = 1.0
 
-A_STAR_SAVE_ALL_K_PATHS = True
-A_STAR_VERBOSE = True
+MULTI_PATH_SAVE_ALL_K_PATHS = True
+MULTI_PATH_VERBOSE = True
+
+
+# ============================================================
+# Multiple-path overlap control
+# ============================================================
+
+# Main switch for path population behavior:
+#   "allow"       = old behavior; ranked paths may overlap/share nodes.
+#   "non_overlap" = after one path is selected, later paths cannot reuse
+#                   previous path nodes/edges except inside the allowed
+#                   buffer around start/end and DB/DK/FLZ service zones.
+MULTI_PATH_OVERLAP_MODE = "non_overlap"
+
+# Overlap is still allowed within this radius around:
+#   - search start/root
+#   - search destination
+#   - DB/DK/FLZ nodes
+# Use 100-200 m for a 50 m grid. Increase if DB/DK/FLZ service areas need
+# a wider common access corridor.
+MULTI_PATH_NON_OVERLAP_BUFFER_RADIUS_M = 150.0
+
+# Facility labels where overlap is operationally acceptable.
+MULTI_PATH_NON_OVERLAP_ALLOWED_PREFIXES = ("DB", "DK", "FLZ")
+
+# Also block reused edges, not only reused nodes. Keep True for strict separation.
+MULTI_PATH_NON_OVERLAP_BLOCK_EDGES = True
 
 # Parallel settings.
-# If A_STAR_N_CORES is None, or larger than machine CPU count,
+# If MULTI_PATH_N_CORES is None, or larger than machine CPU count,
 # use n_cpu - 1 in the algorithm script.
-A_STAR_PARALLEL = True
-A_STAR_N_CORES = None
+MULTI_PATH_PARALLEL = True
+MULTI_PATH_N_CORES = None
 
 
 # ============================================================
