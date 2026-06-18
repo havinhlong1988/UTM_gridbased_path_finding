@@ -148,7 +148,7 @@ PATH_STATUS_BOX_LOCATION = "upper right"
 # Multiple-path algorithm naming rule:
 #     src/astar_multiple.py -> output folder:
 #     astar/multiple/{MULTIPLE_OUTPUT_VALUE}/
-ALGORITHM = ["astar_multiple"]
+ALGORITHM = ["FMM2D"]
 # ALGORITHM = ["astar", "astar_multiple"]
 
 # If False, continue to the next algorithm if one fails.
@@ -648,3 +648,76 @@ PATH_ZOOM_ARROW_EVERY = 1
 # Simpler direction check: adjacent nodes are useful, dense neighbor-edge lines are optional.
 PATH_ZOOM_SHOW_ADJACENT_NODES = True
 PATH_ZOOM_SHOW_NEIGHBOR_EDGES = False
+
+
+# ============================================================
+# Algorithm-specific parameter loader
+# ============================================================
+# Common/shared settings stay in this file.  Only algorithm-specific settings
+# are stored in params/{ALGORITHM}.params, for example:
+#     src/FMM2D.py  <->  params/FMM2D.params
+#     src/astar.py  <->  params/astar.params
+#
+# The loader preserves case, but it also performs a case-insensitive fallback
+# so ALGORITHM = ["fmm2d"] can still find params/FMM2D.params if that is the
+# only matching file.
+
+PARAMS_DIR = PROJECT_DIR / "params"
+LOADED_ALGORITHM_PARAM_FILES = []
+
+
+def _as_algorithm_list(value):
+    if isinstance(value, str):
+        return [value]
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
+
+def _resolve_params_file(algorithm_name):
+    name = str(algorithm_name).strip()
+    if not name:
+        return None
+
+    exact = PARAMS_DIR / f"{name}.params"
+    if exact.exists():
+        return exact
+
+    try:
+        for candidate in PARAMS_DIR.glob("*.params"):
+            if candidate.stem.lower() == name.lower():
+                return candidate
+    except Exception:
+        pass
+
+    return None
+
+
+def _load_algorithm_params():
+    global LOADED_ALGORITHM_PARAM_FILES
+    LOADED_ALGORITHM_PARAM_FILES = []
+
+    for algorithm_name in _as_algorithm_list(ALGORITHM):
+        param_file = _resolve_params_file(algorithm_name)
+        if param_file is None:
+            # Not every algorithm must have a params file.
+            continue
+
+        code = param_file.read_text(encoding="utf-8")
+        exec(compile(code, str(param_file), "exec"), globals(), globals())
+        LOADED_ALGORITHM_PARAM_FILES.append(str(param_file))
+
+
+
+# ============================================================
+# Global resource / low-RAM settings
+# ============================================================
+# Shared defaults used by algorithm-specific params files.
+# Keep conservative for a 16 GB RAM machine.
+LOW_MEMORY_MODE = True
+USE_MULTICORE = False
+MAX_WORKERS = 1
+
+
+_load_algorithm_params()

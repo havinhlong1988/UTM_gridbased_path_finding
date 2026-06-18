@@ -1,0 +1,89 @@
+"""
+params/astar_multiple.params
+
+Configuration for src/astar_multiple.py.
+
+This file contains only A* multiple-path specific settings.
+Shared model/no-fly/plot/output parameters stay directly in parameters.py.
+"""
+
+# ============================================================
+# Multiple-path comparison control
+# ============================================================
+
+MULTI_PATH_K_PATHS = 100
+
+# Folder value to read/write for multiple runs.
+# Use "$MULTI_PATH_K_PATHS" to keep the folder consistent with K.
+MULTIPLE_OUTPUT_VALUE = "$MULTI_PATH_K_PATHS"
+
+PLOT_MULTIPLE_MAX_RANK = "$MULTI_PATH_K_PATHS"
+
+PLOT_MULTIPLE_RANKS = "all"
+
+PLOT_MULTIPLE_RANKED_PATHS = True
+
+
+# ============================================================
+# Multiple-path traveltime histogram
+# ============================================================
+
+PLOT_MULTIPLE_TIME_HISTOGRAM = True
+PLOT_MULTIPLE_TIME_HISTOGRAM_FASTEST_N = "$MULTI_PATH_K_PATHS"
+PLOT_MULTIPLE_TIME_HISTOGRAM_BINS = 20
+
+
+# ============================================================
+# A* multiple-path search settings
+# ============================================================
+
+MULTI_PATH_USE_TURN_PENALTY = True
+MULTI_PATH_TURN_WEIGHT = 10.0
+MULTI_PATH_TURN_ANGLE_THRESHOLD_DEGREE = 1.0
+
+MULTI_PATH_MAX_EXPANSIONS = 5000000
+MULTI_PATH_MAX_STATES_PER_NODE_DIRECTION = 150
+MULTI_PATH_HEURISTIC_WEIGHT = 1.0
+
+MULTI_PATH_SAVE_ALL_K_PATHS = True
+MULTI_PATH_VERBOSE = True
+
+
+# ============================================================
+# Multiple-path overlap control
+# ============================================================
+
+# "allow"       = ranked paths may overlap/share nodes.
+# "non_overlap" = later paths cannot reuse previous path nodes/edges except
+#                 inside allowed DB/DK/FLZ buffers.
+MULTI_PATH_OVERLAP_MODE = "non_overlap"
+
+MULTI_PATH_NON_OVERLAP_BUFFER_RADIUS_M = 150.0
+
+MULTI_PATH_NON_OVERLAP_ALLOWED_PREFIXES = ("DB", "DK", "BD", "FLZ")
+
+MULTI_PATH_NON_OVERLAP_BLOCK_EDGES = True
+
+
+# ============================================================
+# Parallel settings
+# ============================================================
+
+# For 16 GB RAM, False is safer.
+# Set True only after testing memory use.
+MULTI_PATH_PARALLEL = False
+MULTI_PATH_N_CORES = 1
+
+# "sequential" is safest for low RAM.
+# "candidate_pool" may be faster but can duplicate search state in memory.
+MULTI_PATH_PARALLEL_MODE = "sequential"
+
+MULTI_PATH_CANDIDATES_PER_ROUND = 4
+
+MULTI_PATH_MAX_ROUNDS_PER_PATH = 3
+
+MULTI_PATH_CANDIDATE_DIVERSITY_WEIGHT = 0.5
+
+MULTI_PATH_CANDIDATE_SEED = 20260618
+
+MULTI_PATH_MAX_EXPANSIONS_PER_CANDIDATE = None

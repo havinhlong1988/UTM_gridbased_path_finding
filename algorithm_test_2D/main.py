@@ -874,7 +874,7 @@ def normalize_algorithm_names(value):
 
     clean = []
     for item in names:
-        name = str(item).strip().lower()
+        name = str(item).strip()
         if name and name not in clean:
             clean.append(name)
 
@@ -884,15 +884,48 @@ def normalize_algorithm_names(value):
     return clean
 
 
+
+def resolve_algorithm_module_name(name):
+    """Resolve algorithm module filename without forcing lowercase.
+
+    Example:
+        ALGORITHM = "FMM2D" -> src/FMM2D.py
+
+    If the user types fmm2d but only src/FMM2D.py exists, this function
+    resolves the case safely on Linux.
+    """
+    raw = str(name).strip()
+    if not raw:
+        return raw
+
+    src_dir = Path(__file__).resolve().parent / "src"
+    exact_file = src_dir / f"{raw}.py"
+    if exact_file.exists():
+        return raw
+
+    try:
+        for candidate in src_dir.glob("*.py"):
+            if candidate.stem.lower() == raw.lower():
+                return candidate.stem
+    except Exception:
+        pass
+
+    return raw
+
 def run_one_algorithm(algorithm_name):
     run_total_start_time = time.perf_counter()
     algorithm_search_elapsed_s = 0.0
     print_processing_time = bool(get_param("PRINT_PROCESSING_TIME", True))
     save_processing_time_json = bool(get_param("SAVE_PROCESSING_TIME_JSON", True))
 
-    algorithm_name = str(algorithm_name).strip().lower()
+    algorithm_name = str(algorithm_name).strip()
     if not algorithm_name:
         raise ValueError("Empty algorithm name in ALGORITHM list.")
+
+    resolved_algorithm_name = resolve_algorithm_module_name(algorithm_name)
+    if resolved_algorithm_name != algorithm_name:
+        print(f"[INFO] Algorithm name case resolved: {algorithm_name} -> {resolved_algorithm_name}")
+        algorithm_name = resolved_algorithm_name
 
     # ============================================================
     # Basic paths and algorithm

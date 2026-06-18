@@ -1,0 +1,20 @@
+"""
+params/RRT.params
+
+Configuration for future src/RRT.py or src/RRT2D.py tests.
+
+Shared model/no-fly/output/plot parameters stay directly in parameters.py.
+"""
+
+RRT_MAX_ITER = 20000
+RRT_STEP_M = 100.0
+RRT_GOAL_SAMPLE_RATE = 0.10
+RRT_REWIRE_RADIUS_M = 250.0
+RRT_GOAL_TOLERANCE_M = 80.0
+
+RRT_LOW_MEMORY_MODE = "$LOW_MEMORY_MODE"
+RRT_USE_MULTICORE = False
+RRT_MAX_WORKERS = 1
+
+RRT_RANDOM_SEED = 20260618
+RRT_VERBOSE = True

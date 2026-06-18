@@ -1,0 +1,62 @@
+"""
+params/FMM2D.params
+
+Configuration only for src/FMM2D.py.
+One algorithm file handles both fastest-path mode and multiple-path mode.
+"""
+
+# ============================================================
+# FMM2D mode control
+# ============================================================
+# "fastest"  = one fastest path only; overlap action is forced to "none".
+# "multiple" = repeated FMM alternative-path search using penalty/blocking.
+# "auto"     = infer from FMM2D_MAX_PATHS.
+FMM2D_MODE = "fastest"
+
+# In fastest mode this is forced to 1 internally.
+# In multiple mode:
+#   FMM2D_MAX_PATHS = 10    -> request 10 accepted alternative paths
+#   FMM2D_MAX_PATHS = None  -> auto search until no acceptable path or safety stop
+FMM2D_MAX_PATHS = 1
+
+# Safety limits used when FMM2D_MAX_PATHS = None.
+# Keep modest for low-RAM machines.
+FMM2D_MAX_PATHS_SAFETY = 100
+FMM2D_MAX_TOTAL_ATTEMPTS = 300
+FMM2D_MAX_REPEATED_ATTEMPTS = 20
+FMM2D_MAX_ROUNDS_PER_PATH = 3
+
+# ============================================================
+# Overlap control for multiple mode
+# ============================================================
+# "penalty" = keep previous-path corridor open but increase cost
+# "block"   = hard block previous-path corridor, except protected endpoints
+# "none"    = no overlap control
+#
+# Important clause inside src/FMM2D.py:
+#   if FMM2D_MAX_PATHS == 1, this is automatically treated as "none".
+FMM2D_PREVIOUS_PATH_ACTION = "penalty"
+FMM2D_PATH_BUFFER_M = 150.0
+FMM2D_PREVIOUS_PATH_PENALTY_FACTOR = 5.0
+FMM2D_MAX_PENALTY_FACTOR = 1.0e6
+FMM2D_ENDPOINT_PROTECTION_RADIUS_M = 250.0
+FMM2D_MAX_ALLOWED_NODE_OVERLAP_RATIO = 0.85
+
+# ============================================================
+# Slowness / endpoint handling
+# ============================================================
+FMM2D_FLYABLE_ENDPOINT_SLOWNESS_FALLBACK = float(globals().get("FLYABLE_SLOWNESS", 0.085))
+
+# ============================================================
+# Low-RAM defaults
+# ============================================================
+FMM2D_LOW_MEMORY_MODE = bool(globals().get("LOW_MEMORY_MODE", True))
+FMM2D_USE_MULTICORE = False
+FMM2D_MAX_WORKERS = 1
+
+# Optional per-FMM-run expansion limit. None means no extra limit.
+FMM2D_MAX_EXPANDED_NODES = None
+FMM2D_INF_TIME = 1.0e30
+FMM2D_EPS = 1.0e-12
+
+FMM2D_VERBOSE = True

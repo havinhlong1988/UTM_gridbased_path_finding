@@ -1,0 +1,16 @@
+"""
+params/astar.params
+
+Configuration for src/astar.py.
+
+Keep this file small. Shared/common settings are defined directly in parameters.py.
+"""
+
+ASTAR_HEURISTIC = "euclidean"
+ASTAR_HEURISTIC_WEIGHT = 1.0
+ASTAR_MAX_EXPANSIONS = 5000000
+ASTAR_VERBOSE = True
+
+ASTAR_LOW_MEMORY_MODE = "$LOW_MEMORY_MODE"
+ASTAR_USE_MULTICORE = False
+ASTAR_MAX_WORKERS = 1

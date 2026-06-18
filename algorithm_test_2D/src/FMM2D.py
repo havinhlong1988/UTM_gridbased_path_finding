@@ -1,707 +1,501 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-FMM2D.py
+src/FMM2D.py
 
-Fast-Marching-style 2D path tracing on node media for LAE-UTM.
+FMM/Fast-Marching-style path search module for the LAE-UTM main.py protocol.
 
-This script reads a 2D model node file, applies the current flyable/no-fly
-rule, and traces multiple feasible paths from A to B.
+This file is NOT a standalone runner.  It is called by main.py as:
 
-Current LAE-UTM rule implemented here:
-    - slowness < SLOWNESS_NOFLY_THRESHOLD is flyable
-    - slowness >= SLOWNESS_NOFLY_THRESHOLD is no-fly
-    - DB / DK / BD / selected start/end nodes are allowed to be forced flyable
-      even if they are located on a no-fly node, BUT only if they are not
-      completely isolated by no-fly surrounding 8-neighbor nodes.
+    result = src.FMM2D.run(model=model, graph=graph, start_idx=i, end_idx=j, **kwargs)
 
-Important note:
-    A true FMM gives one minimum-arrival-time path for one speed/slowness map.
-    To obtain many possible alternatives, this script repeatedly runs the
-    marching solver and penalizes or blocks a buffer around paths already found.
+It uses the model and graph already prepared by main.py, including the shared
+flyability/no-fly rule:
 
-Input formats supported:
-    Headered file with columns like:
-        index x y z slowness label
-        x y z slowness label
-        lon lat z slowness label
+    slowness < 10.0   -> flyable
+    slowness >= 10.0  -> no-fly
 
-    Headerless whitespace or CSV file, common forms:
-        index x y z slowness label
-        x y z slowness label
-        index x y z slowness
-        x y z slowness
-        x y slowness
+DB/DK/BD/FLZ or selected endpoints may be forced flyable by main.py, but this
+module can reject a forced special node when all surrounding neighbours are
+blocked/no-fly.
 
-Outputs:
-    output/fmm2d/*.csv
-    figures/fmm2d/*.png
+Returned result format is compatible with the existing export/plot section in
+main.py:
+    - result["path_indices"]          : best path
+    - result["path_results"]          : ranked paths, if multiple paths found
+    - result["total_cost"]            : best path travel time/cost
+    - result["k_paths_found"]         : number of accepted paths
+    - result["expanded_states"]       : total expanded nodes over searches
 """
 
 from __future__ import annotations
 
 import heapq
 import math
-import re
-import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import pandas as pd
 
 
-# ======================================================================
-# USER SETTINGS
-# ======================================================================
-
-PROJECT_DIR = Path(".").resolve()
-
-# Change this to your real model file if needed.
-MODEL_FILE = (
-    PROJECT_DIR
-    / "input"
-    / "model"
-    / "senario1"
-    / "mixed_model_2d_after_fly_control_for_pathfinding_with_label.xyz"
-)
-
-OUTPUT_DIR = PROJECT_DIR / "output" / "fmm2d"
-FIGURE_DIR = PROJECT_DIR / "figures" / "fmm2d"
-
-RUN_FMM_PATH_CALCULATION = True
-PLOT_RESULT = True
-
-# Start and end can be given by labels or by coordinates.
-# If START_LABEL / END_LABEL is not None, label search has priority.
-START_LABEL = "DB01"
-END_LABEL = "DK01"
-
-# If label is not found, or you prefer coordinates, set labels to None and use these.
-# Coordinates must be in the same coordinate system as the model x/y columns.
-START_XY: tuple[float, float] | None = None
-END_XY: tuple[float, float] | None = None
-
-# Flyable / no-fly rule.
-SLOWNESS_NOFLY_THRESHOLD = 10.0
-NOFLY_MODE = "greater_equal"  # currently only greater_equal is used
-
-# Value assigned to a forced-flyable DB/DK/BD endpoint if its stored slowness is no-fly.
-# If possible, the script uses the median of nearby flyable neighbors; otherwise this value.
-FLYABLE_ENDPOINT_SLOWNESS_FALLBACK = 0.085
-
-# Labels that may be forced flyable when sitting on a no-fly node.
-# DB is Drone Base, DK is Docking, BD is included because some old files/notes may use BD.
-FORCE_FLYABLE_LABEL_PREFIXES = ("DB", "DK", "BD")
-FORCE_SELECTED_START_END_FLYABLE = True
-ALLOW_FORCE_FLYABLE_ONLY_IF_NOT_ISOLATED = True
-
-# Connectivity for the marching graph.
-# 8 is recommended for 2D diagonal + horizontal/vertical movement.
-CONNECTIVITY = 8  # 4 or 8
-
-# Multiple path generation.
-MAX_PATHS = 30
-
-# How to reduce overlap after a path is found:
-#   "penalty"    : keep nodes open, but make cost higher in the previous path buffer
-#   "hard_block" : block nodes inside previous path buffer
-#   "none"       : no overlap control; usually repeats the same path
-PREVIOUS_PATH_ACTION = "penalty"
-PATH_BUFFER_M = 150.0
-PENALTY_MULTIPLIER = 4.0
-MAX_PENALTY_FACTOR = 1.0e6
-
-# Never block/penalize nodes near start and end within this distance.
-ENDPOINT_PROTECTION_RADIUS_M = 250.0
-
-# Stop if the new path is too similar to all previous paths.
-# Similarity is Jaccard overlap between node sets.
-MAX_ALLOWED_NODE_OVERLAP_RATIO = 0.85
-MAX_REPEATED_ATTEMPTS = 10
-
-# Optional search corridor to reduce computation.
-# If None, all flyable nodes can be searched.
-# If a number, after the first path is found, later runs only search inside this
-# distance from the first path. This can speed up low-RAM machines but can remove
-# far alternative paths.
-SEARCH_CORRIDOR_FROM_FIRST_PATH_M: float | None = None
-
-# Plot controls.
-PLOT_MAX_BACKGROUND_POINTS = 200_000
-PLOT_NODE_SIZE = 2.0
-PLOT_PATH_LINEWIDTH = 1.8
-PLOT_DPI = 220
-
-# Save full arrival-time field for each path. This can be large.
-SAVE_ARRIVAL_TIME_TABLES = False
+# ============================================================
+# Parameter helpers
+# ============================================================
 
 
-# ======================================================================
-# DATA STRUCTURES
-# ======================================================================
-
-@dataclass
-class ModelData:
-    df: pd.DataFrame
-    x_orig: np.ndarray
-    y_orig: np.ndarray
-    x_m: np.ndarray
-    y_m: np.ndarray
-    is_lonlat: bool
-    ix: np.ndarray
-    iy: np.ndarray
-    node_at_cell: dict[tuple[int, int], int]
-
-
-@dataclass
-class PathResult:
-    path_id: int
-    node_indices: list[int]
-    travel_time_s: float
-    distance_m: float
-    status: str
-    overlap_ratio: float
-    message: str
-    arrival_time: np.ndarray | None = None
-
-
-# ======================================================================
-# INPUT READING
-# ======================================================================
-
-def _split_tokens(line: str) -> list[str]:
-    return [t for t in re.split(r"[\s,]+", line.strip()) if t]
-
-
-def _is_float_token(value: str) -> bool:
+def _parameters_module():
     try:
-        float(value)
+        import parameters as P  # type: ignore
+        return P
+    except Exception:
+        return None
+
+
+def _param(kwargs: dict[str, Any], name: str, default: Any = None) -> Any:
+    """Read from kwargs first, then parameters.py, then default."""
+    if name in kwargs and kwargs[name] is not None:
+        return kwargs[name]
+    P = _parameters_module()
+    if P is not None and hasattr(P, name):
+        return getattr(P, name)
+    return default
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "y", "on")
+    return bool(value)
+
+
+def _is_none_like(value: Any) -> bool:
+    """Return True for None / text values used to request auto-until-exhausted mode."""
+    if value is None:
         return True
+    if isinstance(value, str):
+        return value.strip().lower() in ("none", "null", "auto", "all", "unlimited")
+    return False
+
+
+def _optional_positive_int(value: Any, default: int) -> tuple[int, bool]:
+    """Parse max-path style values.
+
+    Returns
+    -------
+    parsed_value : int
+        Positive integer to use internally.
+    is_auto : bool
+        True when the user requested None/auto/all mode.
+    """
+    if _is_none_like(value):
+        return int(default), True
+    ivalue = int(value)
+    return max(1, ivalue), False
+
+
+# ============================================================
+# Coordinate / distance helpers
+# ============================================================
+
+
+def _get_xy_columns(model: pd.DataFrame) -> tuple[str, str]:
+    if {"x", "y"}.issubset(model.columns):
+        return "x", "y"
+    if {"lon", "lat"}.issubset(model.columns):
+        return "lon", "lat"
+    raise ValueError("FMM2D requires model columns x/y or lon/lat.")
+
+
+def _looks_like_lonlat(x: np.ndarray, y: np.ndarray) -> bool:
+    try:
+        finite = np.isfinite(x) & np.isfinite(y)
+        if not np.any(finite):
+            return False
+        xf = x[finite]
+        yf = y[finite]
+        return (
+            np.nanmin(xf) >= -180.0
+            and np.nanmax(xf) <= 180.0
+            and np.nanmin(yf) >= -90.0
+            and np.nanmax(yf) <= 90.0
+            and (np.nanmax(xf) - np.nanmin(xf)) < 5.0
+            and (np.nanmax(yf) - np.nanmin(yf)) < 5.0
+        )
     except Exception:
         return False
 
 
-def _first_data_line(path: Path) -> str:
-    with path.open("r", encoding="utf-8", errors="ignore") as f:
-        for line in f:
-            s = line.strip()
-            if not s:
-                continue
-            if s.startswith("#"):
-                continue
-            return s
-    raise ValueError(f"No data line found in {path}")
+def _xy_to_metric(model: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, bool]:
+    xcol, ycol = _get_xy_columns(model)
+    x = pd.to_numeric(model[xcol], errors="coerce").to_numpy(dtype=float, copy=True)
+    y = pd.to_numeric(model[ycol], errors="coerce").to_numpy(dtype=float, copy=True)
+
+    is_lonlat = _looks_like_lonlat(x, y)
+    if not is_lonlat:
+        return x, y, False
+
+    # Use a local equirectangular approximation to avoid a hard pyproj dependency.
+    lon0 = float(np.nanmean(x))
+    lat0 = float(np.nanmean(y))
+    rad = math.pi / 180.0
+    xm = (x - lon0) * 111_320.0 * math.cos(lat0 * rad)
+    ym = (y - lat0) * 110_540.0
+    return xm.astype(float), ym.astype(float), True
 
 
-def _standardize_header_columns(columns: Iterable[object]) -> dict[object, str]:
-    """Return a rename mapping from input columns to canonical names."""
-    mapping: dict[object, str] = {}
-
-    for col in columns:
-        low = str(col).strip().lower()
-        low_clean = low.replace("-", "_").replace(" ", "_")
-
-        if low_clean in {"id", "idx", "index", "node", "node_id", "node_index"}:
-            mapping[col] = "original_index"
-        elif low_clean in {"x", "lon", "long", "longitude", "easting", "utm_x"}:
-            mapping[col] = "x"
-        elif low_clean in {"y", "lat", "latitude", "northing", "utm_y"}:
-            mapping[col] = "y"
-        elif low_clean in {"z", "elev", "elevation", "height", "alt", "altitude"}:
-            mapping[col] = "z"
-        elif low_clean in {
-            "slow",
-            "slowness",
-            "slowness_s_m",
-            "cost",
-            "cost_s_m",
-            "travel_slowness",
-        }:
-            mapping[col] = "slowness"
-        elif low_clean in {"label", "labels", "name", "class", "node_label", "type"}:
-            mapping[col] = "label"
-
-    return mapping
+def _distance_m(xm: np.ndarray, ym: np.ndarray, i: int, j: int) -> float:
+    return float(math.hypot(float(xm[j] - xm[i]), float(ym[j] - ym[i])))
 
 
-def read_model_file(model_file: Path) -> pd.DataFrame:
-    """Read a model file and return canonical columns.
+# ============================================================
+# Label / flyability helpers
+# ============================================================
 
-    Required output columns:
-        original_index, x, y, z, slowness, label
-    """
-    model_file = Path(model_file)
-    if not model_file.exists():
-        raise FileNotFoundError(
-            f"Model file not found:\n  {model_file}\n"
-            "Please change MODEL_FILE at the top of FMM2D.py."
-        )
 
-    first = _first_data_line(model_file)
-    tokens = _split_tokens(first)
-    first_line_has_header = any(not _is_float_token(t) for t in tokens[:-1])
+def _label_array(model: pd.DataFrame) -> np.ndarray:
+    if "label" in model.columns:
+        return model["label"].fillna("N").astype(str).to_numpy(copy=True)
+    return np.full(len(model), "N", dtype=object)
 
-    # If the first line contains known column names, treat it as a header.
-    known_header_words = {
-        "x", "y", "z", "lon", "lat", "longitude", "latitude", "slowness",
-        "slow", "label", "class", "index", "node", "node_id"
-    }
-    if any(t.strip().lower() in known_header_words for t in tokens):
-        first_line_has_header = True
 
-    if first_line_has_header:
-        df = pd.read_csv(
-            model_file,
-            sep=r"\s+|,",
-            engine="python",
-            comment="#",
-        )
-        rename = _standardize_header_columns(df.columns)
-        df = df.rename(columns=rename)
-    else:
-        raw = pd.read_csv(
-            model_file,
-            sep=r"\s+|,",
-            engine="python",
-            comment="#",
-            header=None,
-        )
-        ncol = raw.shape[1]
-        last_is_label = not _is_float_token(str(raw.iloc[0, ncol - 1]))
+def _label_prefix_array(model: pd.DataFrame) -> np.ndarray:
+    if "label_prefix" in model.columns:
+        return model["label_prefix"].fillna("").astype(str).to_numpy(copy=True)
 
-        if last_is_label:
-            if ncol >= 6:
-                # index x y z slowness label
-                raw = raw.iloc[:, :6]
-                raw.columns = ["original_index", "x", "y", "z", "slowness", "label"]
-            elif ncol == 5:
-                # x y z slowness label
-                raw.columns = ["x", "y", "z", "slowness", "label"]
-            elif ncol == 4:
-                # x y slowness label
-                raw.columns = ["x", "y", "slowness", "label"]
-                raw["z"] = 0.0
+    labels = _label_array(model)
+    out = []
+    for lab in labels:
+        text = str(lab)
+        prefix = ""
+        for ch in text:
+            if ch.isalpha() or ch == "_":
+                prefix += ch
             else:
-                raise ValueError(f"Unsupported headerless format with {ncol} columns: {model_file}")
-        else:
-            if ncol >= 5:
-                # index x y z slowness
-                raw = raw.iloc[:, :5]
-                raw.columns = ["original_index", "x", "y", "z", "slowness"]
-                raw["label"] = "N"
-            elif ncol == 4:
-                # x y z slowness
-                raw.columns = ["x", "y", "z", "slowness"]
-                raw["label"] = "N"
-            elif ncol == 3:
-                # x y slowness
-                raw.columns = ["x", "y", "slowness"]
-                raw["z"] = 0.0
-                raw["label"] = "N"
-            else:
-                raise ValueError(f"Unsupported headerless format with {ncol} columns: {model_file}")
-        df = raw
-
-    required = {"x", "y", "slowness"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(
-            f"Missing required columns {missing} in {model_file}.\n"
-            f"Detected columns: {list(df.columns)}"
-        )
-
-    if "original_index" not in df.columns:
-        df["original_index"] = np.arange(len(df), dtype=int)
-    if "z" not in df.columns:
-        df["z"] = 0.0
-    if "label" not in df.columns:
-        df["label"] = "N"
-
-    keep = ["original_index", "x", "y", "z", "slowness", "label"]
-    df = df[keep].copy()
-
-    for col in ["x", "y", "z", "slowness"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    df["label"] = df["label"].fillna("N").astype(str).str.strip()
-    df["original_index"] = df["original_index"].fillna(np.arange(len(df))).astype(str)
-
-    before = len(df)
-    df = df.dropna(subset=["x", "y", "slowness"]).reset_index(drop=True)
-    after = len(df)
-    if after < before:
-        print(f"[WARN] Dropped {before - after} rows with invalid x/y/slowness values.")
-
-    return df
+                break
+        out.append(prefix or text)
+    return np.asarray(out, dtype=object)
 
 
-# ======================================================================
-# COORDINATES AND GRID INDEXING
-# ======================================================================
-
-def looks_like_lonlat(x: np.ndarray, y: np.ndarray) -> bool:
-    return (
-        np.nanmin(x) >= -180.0
-        and np.nanmax(x) <= 180.0
-        and np.nanmin(y) >= -90.0
-        and np.nanmax(y) <= 90.0
-        and (np.nanmax(x) - np.nanmin(x)) < 5.0
-        and (np.nanmax(y) - np.nanmin(y)) < 5.0
-    )
+def _starts_with_any(text: str, prefixes: Iterable[str]) -> bool:
+    t = str(text).upper()
+    return any(t.startswith(str(p).upper()) for p in prefixes)
 
 
-def lonlat_to_metric(lon: np.ndarray, lat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Project lon/lat to meters. Use pyproj UTM if available; otherwise local approximation."""
-    lon0 = float(np.nanmean(lon))
-    lat0 = float(np.nanmean(lat))
+def _special_mask(model: pd.DataFrame, prefixes: tuple[str, ...]) -> np.ndarray:
+    labels = _label_array(model)
+    label_prefix = _label_prefix_array(model)
+    mask = np.zeros(len(model), dtype=bool)
+    for p in prefixes:
+        pp = str(p).upper()
+        if not pp:
+            continue
+        mask |= np.char.startswith(labels.astype(str), pp)
+        mask |= np.char.startswith(label_prefix.astype(str), pp)
+    return mask
+
+
+def _slowness_array(model: pd.DataFrame, fallback: float) -> np.ndarray:
+    if "slowness" not in model.columns:
+        return np.full(len(model), float(fallback), dtype=float)
+    slow = pd.to_numeric(model["slowness"], errors="coerce").to_numpy(dtype=float, copy=True)
+    slow[~np.isfinite(slow)] = float(fallback)
+    return slow
+
+
+def _valid_mask_from_graph(model: pd.DataFrame, graph: dict[str, Any]) -> np.ndarray:
+    n = len(model)
+    valid = graph.get("valid_indices", None)
+    if valid is None:
+        if "is_flyable" in model.columns:
+            return model["is_flyable"].astype(bool).to_numpy(copy=True)
+        return np.ones(n, dtype=bool)
+
+    mask = np.zeros(n, dtype=bool)
+    for i in valid:
+        ii = int(i)
+        if 0 <= ii < n:
+            mask[ii] = True
+    return mask
+
+
+# ============================================================
+# Graph neighbour extraction
+# ============================================================
+
+
+def _parse_neighbor_item(item: Any) -> int | None:
+    """Extract neighbour index from several common adjacency formats."""
+    if item is None:
+        return None
+
+    if isinstance(item, (int, np.integer)):
+        return int(item)
+
+    if isinstance(item, dict):
+        for key in ("to", "target", "node", "idx", "index", "neighbor"):
+            if key in item:
+                try:
+                    return int(item[key])
+                except Exception:
+                    return None
+        return None
+
+    if isinstance(item, (tuple, list, np.ndarray)) and len(item) > 0:
+        try:
+            return int(item[0])
+        except Exception:
+            return None
 
     try:
-        from pyproj import Transformer
-
-        zone = int(math.floor((lon0 + 180.0) / 6.0) + 1)
-        epsg = 32600 + zone if lat0 >= 0 else 32700 + zone
-        transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
-        xm, ym = transformer.transform(lon, lat)
-        return np.asarray(xm, dtype=float), np.asarray(ym, dtype=float)
+        return int(item)
     except Exception:
-        # Good enough for a small local study area.
-        rad = math.pi / 180.0
-        x_m = (lon - lon0) * 111_320.0 * math.cos(lat0 * rad)
-        y_m = (lat - lat0) * 110_540.0
-        return np.asarray(x_m, dtype=float), np.asarray(y_m, dtype=float)
-
-
-def build_model_data(df: pd.DataFrame) -> ModelData:
-    x_orig = df["x"].to_numpy(float)
-    y_orig = df["y"].to_numpy(float)
-    is_ll = looks_like_lonlat(x_orig, y_orig)
-
-    if is_ll:
-        x_m, y_m = lonlat_to_metric(x_orig, y_orig)
-        print("[INFO] x/y look like lon/lat. Internally projected to meters for distance/cost.")
-    else:
-        x_m, y_m = x_orig.copy(), y_orig.copy()
-        print("[INFO] x/y treated as projected/metric coordinates.")
-
-    # Build regular-grid integer coordinates from sorted unique x/y values.
-    # Rounding protects against tiny floating point noise.
-    decimals = 10 if is_ll else 6
-    xr = np.round(x_orig, decimals=decimals)
-    yr = np.round(y_orig, decimals=decimals)
-
-    unique_x = np.array(sorted(pd.unique(xr)))
-    unique_y = np.array(sorted(pd.unique(yr)))
-
-    x_to_ix = {v: i for i, v in enumerate(unique_x)}
-    y_to_iy = {v: i for i, v in enumerate(unique_y)}
-
-    ix = np.fromiter((x_to_ix[v] for v in xr), dtype=np.int64, count=len(df))
-    iy = np.fromiter((y_to_iy[v] for v in yr), dtype=np.int64, count=len(df))
-
-    node_at_cell: dict[tuple[int, int], int] = {}
-    duplicate_count = 0
-    for node_i, cell in enumerate(zip(iy, ix)):
-        key = (int(cell[0]), int(cell[1]))
-        if key in node_at_cell:
-            duplicate_count += 1
-            # Keep the first; duplicate rows should normally not exist.
-            continue
-        node_at_cell[key] = node_i
-
-    if duplicate_count:
-        print(f"[WARN] Found {duplicate_count} duplicate grid cells. First node kept for each cell.")
-
-    nx = len(unique_x)
-    ny = len(unique_y)
-    fill_ratio = len(node_at_cell) / max(nx * ny, 1)
-    print(f"[INFO] Grid index: nx={nx:,}, ny={ny:,}, nodes={len(df):,}, fill={fill_ratio:.3f}")
-
-    return ModelData(
-        df=df,
-        x_orig=x_orig,
-        y_orig=y_orig,
-        x_m=x_m,
-        y_m=y_m,
-        is_lonlat=is_ll,
-        ix=ix,
-        iy=iy,
-        node_at_cell=node_at_cell,
-    )
-
-
-# ======================================================================
-# FLYABLE / NO-FLY LOGIC
-# ======================================================================
-
-def label_has_prefix(label: str, prefixes: tuple[str, ...]) -> bool:
-    lab = str(label).strip().upper()
-    return any(lab.startswith(p.upper()) for p in prefixes)
-
-
-def base_flyable_mask(slowness: np.ndarray) -> np.ndarray:
-    if NOFLY_MODE != "greater_equal":
-        raise ValueError("Only NOFLY_MODE='greater_equal' is currently implemented.")
-    return np.isfinite(slowness) & (slowness < SLOWNESS_NOFLY_THRESHOLD)
-
-
-def neighbor_offsets(connectivity: int = 8) -> list[tuple[int, int]]:
-    if connectivity == 4:
-        return [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    if connectivity == 8:
-        return [
-            (-1, -1), (-1, 0), (-1, 1),
-            (0, -1),           (0, 1),
-            (1, -1),  (1, 0),  (1, 1),
-        ]
-    raise ValueError("CONNECTIVITY must be 4 or 8")
-
-
-def get_neighbor_indices(model: ModelData, node_idx: int, connectivity: int = 8) -> list[int]:
-    iy = int(model.iy[node_idx])
-    ix = int(model.ix[node_idx])
-    out: list[int] = []
-    for dy, dx in neighbor_offsets(connectivity):
-        j = model.node_at_cell.get((iy + dy, ix + dx))
-        if j is not None:
-            out.append(j)
-    return out
-
-
-def is_node_isolated_by_nofly(
-    model: ModelData,
-    node_idx: int,
-    base_flyable: np.ndarray,
-) -> bool:
-    """True if none of the surrounding 8-neighbor nodes is flyable."""
-    neigh = get_neighbor_indices(model, node_idx, connectivity=8)
-    if not neigh:
-        return True
-    return not bool(np.any(base_flyable[np.asarray(neigh, dtype=int)]))
-
-
-def local_endpoint_slowness(
-    model: ModelData,
-    node_idx: int,
-    slowness: np.ndarray,
-    base_flyable: np.ndarray,
-) -> float:
-    neigh = get_neighbor_indices(model, node_idx, connectivity=8)
-    if neigh:
-        vals = slowness[np.asarray(neigh, dtype=int)]
-        vals = vals[np.isfinite(vals) & base_flyable[np.asarray(neigh, dtype=int)]]
-        vals = vals[(vals > 0.0) & (vals < SLOWNESS_NOFLY_THRESHOLD)]
-        if len(vals):
-            return float(np.median(vals))
-    return float(FLYABLE_ENDPOINT_SLOWNESS_FALLBACK)
-
-
-def apply_flyable_rules(
-    model: ModelData,
-    start_idx: int | None,
-    end_idx: int | None,
-) -> tuple[np.ndarray, np.ndarray, dict[str, int]]:
-    df = model.df
-    slowness = df["slowness"].to_numpy(float)
-    base = base_flyable_mask(slowness)
-    flyable = base.copy()
-    effective_slowness = slowness.copy()
-
-    labels = df["label"].astype(str).to_numpy()
-    forced_candidates: set[int] = set()
-
-    for i, lab in enumerate(labels):
-        if label_has_prefix(lab, FORCE_FLYABLE_LABEL_PREFIXES):
-            forced_candidates.add(i)
-
-    if FORCE_SELECTED_START_END_FLYABLE:
-        if start_idx is not None:
-            forced_candidates.add(int(start_idx))
-        if end_idx is not None:
-            forced_candidates.add(int(end_idx))
-
-    stats = {
-        "base_flyable": int(np.count_nonzero(base)),
-        "base_nofly": int(len(base) - np.count_nonzero(base)),
-        "forced_endpoint_flyable": 0,
-        "forced_endpoint_kept_blocked_isolated": 0,
-        "forced_endpoint_already_flyable": 0,
-    }
-
-    for i in sorted(forced_candidates):
-        if base[i]:
-            stats["forced_endpoint_already_flyable"] += 1
-            continue
-
-        isolated = is_node_isolated_by_nofly(model, i, base)
-        if ALLOW_FORCE_FLYABLE_ONLY_IF_NOT_ISOLATED and isolated:
-            flyable[i] = False
-            stats["forced_endpoint_kept_blocked_isolated"] += 1
-            continue
-
-        flyable[i] = True
-        effective_slowness[i] = local_endpoint_slowness(model, i, slowness, base)
-        stats["forced_endpoint_flyable"] += 1
-
-    # Clean any invalid or nonpositive effective slowness on flyable nodes.
-    bad = flyable & (~np.isfinite(effective_slowness) | (effective_slowness <= 0.0))
-    if np.any(bad):
-        effective_slowness[bad] = FLYABLE_ENDPOINT_SLOWNESS_FALLBACK
-
-    return flyable, effective_slowness, stats
-
-
-# ======================================================================
-# START / END SELECTION
-# ======================================================================
-
-def find_node_by_label(df: pd.DataFrame, wanted: str | None) -> int | None:
-    if wanted is None:
         return None
-    wanted_norm = str(wanted).strip().upper()
-    labels = df["label"].astype(str).str.strip().str.upper()
 
-    exact = np.flatnonzero(labels.to_numpy() == wanted_norm)
-    if len(exact):
-        return int(exact[0])
 
-    # If the user writes DB1 but file has DB01, or vice versa, compare compact forms.
-    def compact(s: str) -> str:
-        m = re.match(r"^([A-Z_\-]+)0*([0-9]+)$", s)
-        if m:
-            return f"{m.group(1)}{int(m.group(2))}"
-        return s
-
-    wanted_compact = compact(wanted_norm)
-    compact_labels = np.array([compact(x) for x in labels.to_numpy()])
-    match = np.flatnonzero(compact_labels == wanted_compact)
-    if len(match):
-        return int(match[0])
-
+def _find_adjacency_object(graph: dict[str, Any]) -> Any | None:
+    """Find an adjacency object inside graph, if build_grid_graph stored one."""
+    candidate_keys = (
+        "neighbors",
+        "neighbours",
+        "adjacency",
+        "adj",
+        "edges",
+        "neighbor_indices",
+        "graph",
+    )
+    for key in candidate_keys:
+        obj = graph.get(key, None)
+        if obj is not None:
+            return obj
     return None
 
 
-def find_nearest_node(model: ModelData, xy: tuple[float, float] | None) -> int | None:
-    if xy is None:
-        return None
+def _neighbor_function_from_graph(
+    model: pd.DataFrame,
+    graph: dict[str, Any],
+    xm: np.ndarray,
+    ym: np.ndarray,
+    valid_mask: np.ndarray,
+    connectivity: int,
+) -> Callable[[int], list[int]]:
+    """Return a function i -> neighbour indices.
 
-    x, y = xy
-    if model.is_lonlat:
-        x_arr = np.array([x], dtype=float)
-        y_arr = np.array([y], dtype=float)
-        xm, ym = lonlat_to_metric(x_arr, y_arr)
-        qx, qy = float(xm[0]), float(ym[0])
-        # The local projection from lonlat_to_metric above is based only on the point;
-        # for nearest-node search in small areas, use original lon/lat squared distance instead.
-        d2 = (model.x_orig - x) ** 2 + (model.y_orig - y) ** 2
-    else:
-        qx, qy = x, y
-        d2 = (model.x_m - qx) ** 2 + (model.y_m - qy) ** 2
-    return int(np.nanargmin(d2))
+    First tries graph adjacency.  If unavailable, builds a low-memory KDTree
+    neighbour query using the same radius/max-neighbour hints stored in graph.
+    """
+    n = len(model)
+    adjacency = _find_adjacency_object(graph)
+
+    if adjacency is not None:
+        if isinstance(adjacency, dict):
+            def neigh_from_dict(i: int) -> list[int]:
+                raw = adjacency.get(i, adjacency.get(str(i), []))
+                if isinstance(raw, dict):
+                    items = raw.keys()
+                else:
+                    items = raw
+                out: list[int] = []
+                for item in items:
+                    j = _parse_neighbor_item(item)
+                    if j is not None and 0 <= j < n:
+                        out.append(j)
+                return out
+            return neigh_from_dict
+
+        if isinstance(adjacency, (list, tuple)) and len(adjacency) >= n:
+            def neigh_from_list(i: int) -> list[int]:
+                raw = adjacency[int(i)]
+                if isinstance(raw, dict):
+                    items = raw.keys()
+                else:
+                    items = raw
+                out: list[int] = []
+                for item in items:
+                    j = _parse_neighbor_item(item)
+                    if j is not None and 0 <= j < n:
+                        out.append(j)
+                return out
+            return neigh_from_list
+
+    # Fallback: query by radius from coordinates.
+    # This is still low-memory compared with building a dense full graph.
+    try:
+        from scipy.spatial import cKDTree
+    except Exception as exc:
+        raise RuntimeError(
+            "FMM2D could not find graph adjacency, and scipy.spatial.cKDTree "
+            "is not available for fallback neighbour search. Please make sure "
+            "build_grid_graph() stores graph['neighbors'] or install scipy."
+        ) from exc
+
+    coords = np.column_stack([xm, ym]).copy()
+    tree = cKDTree(coords)
+
+    radius_m = graph.get("neighbor_radius_m", None)
+    if radius_m is None or float(radius_m) <= 0.0:
+        spacing = graph.get("grid_spacing_m", None)
+        if spacing is not None and float(spacing) > 0.0:
+            radius_m = 1.60 * float(spacing)
+        else:
+            # Estimate from nearest neighbour distance on a small sample.
+            sample_n = min(len(coords), 5000)
+            sample = coords[:sample_n]
+            sample_tree = cKDTree(sample)
+            d, _ = sample_tree.query(sample, k=2)
+            nn = d[:, 1]
+            nn = nn[np.isfinite(nn) & (nn > 0.0)]
+            radius_m = 1.60 * float(np.median(nn)) if len(nn) else 1.0
+
+    max_neighbors = int(graph.get("max_neighbors", 8 if connectivity == 8 else 4))
+    max_neighbors = max(max_neighbors, 8 if connectivity == 8 else 4)
+
+    def neigh_from_kdtree(i: int) -> list[int]:
+        inds = tree.query_ball_point(coords[int(i)], r=float(radius_m))
+        inds = [int(j) for j in inds if int(j) != int(i)]
+        if not inds:
+            return []
+        # Keep closest candidates only.
+        inds.sort(key=lambda j: (coords[j, 0] - coords[i, 0]) ** 2 + (coords[j, 1] - coords[i, 1]) ** 2)
+        return inds[:max_neighbors]
+
+    return neigh_from_kdtree
 
 
-def resolve_start_end(model: ModelData) -> tuple[int, int]:
-    df = model.df
-
-    start_idx = find_node_by_label(df, START_LABEL)
-    end_idx = find_node_by_label(df, END_LABEL)
-
-    if start_idx is None:
-        start_idx = find_nearest_node(model, START_XY)
-    if end_idx is None:
-        end_idx = find_nearest_node(model, END_XY)
-
-    if start_idx is None:
-        raise ValueError(
-            "Could not resolve START node. Set START_LABEL to an existing label "
-            "or set START_XY=(x, y)."
-        )
-    if end_idx is None:
-        raise ValueError(
-            "Could not resolve END node. Set END_LABEL to an existing label "
-            "or set END_XY=(x, y)."
-        )
-
-    return int(start_idx), int(end_idx)
+def _count_active_neighbors(neighbor_fn: Callable[[int], list[int]], active: np.ndarray, idx: int) -> int:
+    count = 0
+    for j in neighbor_fn(int(idx)):
+        if 0 <= int(j) < len(active) and bool(active[int(j)]):
+            count += 1
+    return count
 
 
-# ======================================================================
-# FAST MARCHING GRAPH SOLVER
-# ======================================================================
-
-def build_neighbor_list(model: ModelData, connectivity: int) -> list[list[int]]:
-    n = len(model.df)
-    neigh: list[list[int]] = [[] for _ in range(n)]
-    offsets = neighbor_offsets(connectivity)
-    for i in range(n):
-        iy = int(model.iy[i])
-        ix = int(model.ix[i])
-        out: list[int] = []
-        for dy, dx in offsets:
-            j = model.node_at_cell.get((iy + dy, ix + dx))
-            if j is not None:
-                out.append(j)
-        neigh[i] = out
-    return neigh
+# ============================================================
+# Slowness correction for forced endpoints/facilities
+# ============================================================
 
 
-def edge_cost_s(
-    model: ModelData,
-    i: int,
-    j: int,
-    effective_slowness: np.ndarray,
-    penalty_factor: np.ndarray,
-) -> float:
-    dx = model.x_m[j] - model.x_m[i]
-    dy = model.y_m[j] - model.y_m[i]
-    dist_m = math.hypot(float(dx), float(dy))
-
-    slow = 0.5 * (effective_slowness[i] + effective_slowness[j])
-    penalty = 0.5 * (penalty_factor[i] + penalty_factor[j])
-    return dist_m * slow * penalty
-
-
-def fmm_shortest_arrival(
-    model: ModelData,
-    neighbors: list[list[int]],
+def _make_effective_slowness(
+    model: pd.DataFrame,
+    neighbor_fn: Callable[[int], list[int]],
+    active: np.ndarray,
     start_idx: int,
     end_idx: int,
-    flyable: np.ndarray,
-    effective_slowness: np.ndarray,
-    penalty_factor: np.ndarray,
-    extra_blocked: np.ndarray | None = None,
-    corridor_mask: np.ndarray | None = None,
-) -> tuple[np.ndarray, np.ndarray, str]:
-    """Fast-Marching-style label-setting propagation on the 2D node graph.
+    kwargs: dict[str, Any],
+) -> np.ndarray:
+    threshold = float(_param(kwargs, "NO_FLY_SLOWNESS_THRESHOLD", 10.0))
+    fallback = float(_param(kwargs, "FMM2D_FLYABLE_ENDPOINT_SLOWNESS_FALLBACK", _param(kwargs, "FLYABLE_SLOWNESS", 0.085)))
+    special_prefixes = tuple(_param(kwargs, "ALWAYS_FLYABLE_PREFIXES", ("DB", "DK", "BD", "FLZ")))
 
-    This is equivalent to Dijkstra/FMM on a graph with positive edge costs.
-    It is robust for node media and supports holes/no-fly cells.
-    """
-    n = len(model.df)
-    active = flyable.copy()
+    slow = _slowness_array(model, fallback=fallback)
+    eff = slow.copy()
 
-    if extra_blocked is not None:
-        active &= ~extra_blocked
-    if corridor_mask is not None:
-        active &= corridor_mask
+    special = _special_mask(model, special_prefixes)
+    special[int(start_idx)] = True
+    special[int(end_idx)] = True
 
-    # Always allow the selected start/end if the flyable rule accepted them.
-    active[start_idx] = bool(flyable[start_idx])
-    active[end_idx] = bool(flyable[end_idx])
+    # If a forced special endpoint/facility has no-fly slowness, do not use the
+    # no-fly value as travel time. Use median flyable neighbour slowness.
+    forced = active & special & (~np.isfinite(eff) | (eff >= threshold) | (eff <= 0.0))
+    for i in np.flatnonzero(forced):
+        neigh = neighbor_fn(int(i))
+        vals = []
+        for j in neigh:
+            jj = int(j)
+            if 0 <= jj < len(slow) and active[jj] and np.isfinite(slow[jj]) and 0.0 < slow[jj] < threshold:
+                vals.append(float(slow[jj]))
+        eff[i] = float(np.median(vals)) if vals else fallback
 
-    if not active[start_idx]:
-        return np.full(n, np.inf), np.full(n, -1, dtype=np.int64), "start_blocked"
-    if not active[end_idx]:
-        return np.full(n, np.inf), np.full(n, -1, dtype=np.int64), "end_blocked"
+    bad = active & (~np.isfinite(eff) | (eff <= 0.0))
+    eff[bad] = fallback
+    return eff
 
-    T = np.full(n, np.inf, dtype=float)
+
+def _apply_isolated_special_rule(
+    model: pd.DataFrame,
+    neighbor_fn: Callable[[int], list[int]],
+    active: np.ndarray,
+    start_idx: int,
+    end_idx: int,
+    kwargs: dict[str, Any],
+) -> tuple[np.ndarray, list[int]]:
+    """Block special nodes with no active 8-neighbour access if requested."""
+    use_rule = _as_bool(_param(kwargs, "SPECIAL_NODE_BLOCK_IF_ALL_8_NEIGHBORS_NOFLY", True))
+    if not use_rule:
+        return active, []
+
+    prefixes = tuple(_param(kwargs, "ALWAYS_FLYABLE_PREFIXES", ("DB", "DK", "BD", "FLZ")))
+    special = _special_mask(model, prefixes)
+
+    # Always check start/end even if their label is unusual.
+    special[int(start_idx)] = True
+    special[int(end_idx)] = True
+
+    active2 = active.copy()
+    blocked: list[int] = []
+    for i in np.flatnonzero(special & active):
+        # Temporarily ignore the node itself.  A node with no active neighbours
+        # cannot connect to the flyable graph even if main.py forced it valid.
+        n_active = _count_active_neighbors(neighbor_fn, active, int(i))
+        if n_active <= 0:
+            active2[int(i)] = False
+            blocked.append(int(i))
+
+    return active2, blocked
+
+
+# ============================================================
+# FMM / Dijkstra label-setting solver
+# ============================================================
+
+
+def _edge_cost_s(
+    xm: np.ndarray,
+    ym: np.ndarray,
+    slow: np.ndarray,
+    penalty: np.ndarray,
+    i: int,
+    j: int,
+) -> float:
+    dist = _distance_m(xm, ym, int(i), int(j))
+    if dist <= 0.0 or not np.isfinite(dist):
+        return float("inf")
+    s = 0.5 * (float(slow[int(i)]) + float(slow[int(j)]))
+    p = 0.5 * (float(penalty[int(i)]) + float(penalty[int(j)]))
+    c = dist * s * p
+    return float(c) if np.isfinite(c) and c > 0.0 else float("inf")
+
+
+def _fmm_search(
+    *,
+    n: int,
+    neighbor_fn: Callable[[int], list[int]],
+    active: np.ndarray,
+    blocked: np.ndarray,
+    xm: np.ndarray,
+    ym: np.ndarray,
+    slow: np.ndarray,
+    penalty: np.ndarray,
+    start_idx: int,
+    end_idx: int,
+    max_expanded_nodes: int | None,
+    inf_time: float,
+) -> tuple[np.ndarray, np.ndarray, str, int]:
+    usable = active & (~blocked)
+    usable[int(start_idx)] = bool(active[int(start_idx)])
+    usable[int(end_idx)] = bool(active[int(end_idx)])
+
+    T = np.full(n, float(inf_time), dtype=float)
     parent = np.full(n, -1, dtype=np.int64)
-    accepted = np.zeros(n, dtype=bool)
 
-    T[start_idx] = 0.0
+    if not usable[int(start_idx)]:
+        return T, parent, "start_blocked", 0
+    if not usable[int(end_idx)]:
+        return T, parent, "end_blocked", 0
+
+    accepted = np.zeros(n, dtype=bool)
+    T[int(start_idx)] = 0.0
     heap: list[tuple[float, int]] = [(0.0, int(start_idx))]
+    expanded = 0
 
     while heap:
         t_i, i = heapq.heappop(heap)
@@ -711,553 +505,634 @@ def fmm_shortest_arrival(
             continue
 
         accepted[i] = True
-        if i == end_idx:
-            return T, parent, "ok"
+        expanded += 1
 
-        for j in neighbors[i]:
-            if accepted[j] or not active[j]:
+        if i == int(end_idx):
+            return T, parent, "ok", expanded
+
+        if max_expanded_nodes is not None and expanded >= int(max_expanded_nodes):
+            return T, parent, "max_expanded_nodes", expanded
+
+        for j in neighbor_fn(i):
+            jj = int(j)
+            if jj < 0 or jj >= n:
                 continue
-            c = edge_cost_s(model, i, j, effective_slowness, penalty_factor)
-            if not np.isfinite(c) or c <= 0.0:
+            if accepted[jj] or not usable[jj]:
+                continue
+            c = _edge_cost_s(xm, ym, slow, penalty, i, jj)
+            if not np.isfinite(c):
                 continue
             cand = t_i + c
-            if cand < T[j]:
-                T[j] = cand
-                parent[j] = i
-                heapq.heappush(heap, (cand, int(j)))
+            if cand < T[jj]:
+                T[jj] = cand
+                parent[jj] = int(i)
+                heapq.heappush(heap, (float(cand), jj))
 
-    return T, parent, "unreachable"
+    return T, parent, "unreachable", expanded
 
 
-def reconstruct_path(parent: np.ndarray, start_idx: int, end_idx: int) -> list[int]:
+def _reconstruct_path(parent: np.ndarray, start_idx: int, end_idx: int) -> list[int]:
+    start_idx = int(start_idx)
+    end_idx = int(end_idx)
     if start_idx == end_idx:
-        return [int(start_idx)]
+        return [start_idx]
     if parent[end_idx] < 0:
         return []
 
-    path = [int(end_idx)]
-    current = int(end_idx)
-    max_steps = len(parent) + 5
-    for _ in range(max_steps):
+    path = [end_idx]
+    current = end_idx
+    for _ in range(len(parent) + 5):
         current = int(parent[current])
         if current < 0:
             return []
         path.append(current)
         if current == start_idx:
             path.reverse()
-            return path
+            return [int(i) for i in path]
     return []
 
 
-def path_distance_m(model: ModelData, path: list[int]) -> float:
+def _path_distance_m(xm: np.ndarray, ym: np.ndarray, path: list[int]) -> float:
     if len(path) < 2:
         return 0.0
     idx = np.asarray(path, dtype=int)
-    dx = np.diff(model.x_m[idx])
-    dy = np.diff(model.y_m[idx])
+    dx = np.diff(xm[idx])
+    dy = np.diff(ym[idx])
     return float(np.sum(np.hypot(dx, dy)))
 
 
-def path_overlap_ratio(path: list[int], previous_paths: list[list[int]]) -> float:
+def _path_overlap_ratio(path: list[int], previous_paths: list[list[int]]) -> float:
     if not previous_paths:
         return 0.0
-    s = set(path)
+    s = set(int(i) for i in path)
     if not s:
         return 1.0
     best = 0.0
-    for p in previous_paths:
-        q = set(p)
-        inter = len(s & q)
+    for old in previous_paths:
+        q = set(int(i) for i in old)
         union = len(s | q)
         if union:
-            best = max(best, inter / union)
+            best = max(best, len(s & q) / union)
     return float(best)
 
 
-# ======================================================================
-# PATH BUFFER / PENALTY
-# ======================================================================
+# ============================================================
+# Multiple-path overlap control
+# ============================================================
 
-def _kd_query_within_path(
-    model: ModelData,
+
+def _nodes_within_path_buffer(
+    tree: Any,
+    coords: np.ndarray,
     path: list[int],
     radius_m: float,
+    low_memory: bool,
 ) -> np.ndarray:
-    """Return mask of nodes within radius from any node in path."""
-    n = len(model.df)
+    n = len(coords)
+    mask = np.zeros(n, dtype=bool)
     if radius_m <= 0.0 or not path:
-        return np.zeros(n, dtype=bool)
-
-    coords_all = np.column_stack([model.x_m, model.y_m])
-    path_coords = coords_all[np.asarray(path, dtype=int)]
-
-    try:
-        from scipy.spatial import cKDTree
-
-        tree = cKDTree(path_coords)
-        dist, _ = tree.query(coords_all, k=1, distance_upper_bound=radius_m)
-        return np.isfinite(dist)
-    except Exception:
-        # Fallback without scipy. Chunk to avoid high memory.
-        mask = np.zeros(n, dtype=bool)
-        r2 = radius_m * radius_m
-        chunk = 25_000
-        px = path_coords[:, 0]
-        py = path_coords[:, 1]
-        for start in range(0, n, chunk):
-            stop = min(start + chunk, n)
-            ax = coords_all[start:stop, 0][:, None]
-            ay = coords_all[start:stop, 1][:, None]
-            d2 = (ax - px[None, :]) ** 2 + (ay - py[None, :]) ** 2
-            mask[start:stop] = np.any(d2 <= r2, axis=1)
         return mask
 
+    path_idx = np.asarray(path, dtype=int)
 
-def protected_endpoint_mask(
-    model: ModelData,
-    start_idx: int,
-    end_idx: int,
-    radius_m: float,
-) -> np.ndarray:
-    n = len(model.df)
-    if radius_m <= 0.0:
-        mask = np.zeros(n, dtype=bool)
-        mask[start_idx] = True
-        mask[end_idx] = True
-        return mask
-
-    sx, sy = model.x_m[start_idx], model.y_m[start_idx]
-    ex, ey = model.x_m[end_idx], model.y_m[end_idx]
-    ds = np.hypot(model.x_m - sx, model.y_m - sy)
-    de = np.hypot(model.x_m - ex, model.y_m - ey)
-    return (ds <= radius_m) | (de <= radius_m)
-
-
-def update_overlap_control(
-    model: ModelData,
-    path: list[int],
-    start_idx: int,
-    end_idx: int,
-    penalty_factor: np.ndarray,
-    extra_blocked: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, int]:
-    if PREVIOUS_PATH_ACTION.lower() == "none":
-        return penalty_factor, extra_blocked, 0
-
-    mask = _kd_query_within_path(model, path, PATH_BUFFER_M)
-    protected = protected_endpoint_mask(model, start_idx, end_idx, ENDPOINT_PROTECTION_RADIUS_M)
-    mask &= ~protected
-
-    n_changed = int(np.count_nonzero(mask))
-
-    action = PREVIOUS_PATH_ACTION.lower()
-    if action == "penalty":
-        penalty_factor[mask] = np.minimum(
-            penalty_factor[mask] * float(PENALTY_MULTIPLIER),
-            float(MAX_PENALTY_FACTOR),
-        )
-    elif action == "hard_block":
-        extra_blocked[mask] = True
-    else:
-        raise ValueError("PREVIOUS_PATH_ACTION must be 'penalty', 'hard_block', or 'none'")
-
-    return penalty_factor, extra_blocked, n_changed
-
-
-def make_corridor_mask_from_first_path(model: ModelData, first_path: list[int]) -> np.ndarray | None:
-    if SEARCH_CORRIDOR_FROM_FIRST_PATH_M is None:
-        return None
-    mask = _kd_query_within_path(model, first_path, float(SEARCH_CORRIDOR_FROM_FIRST_PATH_M))
-    print(
-        f"[INFO] Search corridor enabled: {np.count_nonzero(mask):,} nodes "
-        f"within {SEARCH_CORRIDOR_FROM_FIRST_PATH_M:.1f} m from first path."
-    )
+    # Query path nodes in chunks to avoid one very large Python list on low RAM.
+    chunk = 256 if low_memory else 2048
+    for start in range(0, len(path_idx), chunk):
+        sub = coords[path_idx[start:start + chunk]]
+        found = tree.query_ball_point(sub, r=float(radius_m))
+        for item in found:
+            if item:
+                mask[np.asarray(item, dtype=int)] = True
     return mask
 
 
-# ======================================================================
-# MULTI-PATH DRIVER
-# ======================================================================
+def _endpoint_protection_mask(coords: np.ndarray, start_idx: int, end_idx: int, radius_m: float) -> np.ndarray:
+    n = len(coords)
+    if radius_m <= 0.0:
+        mask = np.zeros(n, dtype=bool)
+        mask[int(start_idx)] = True
+        mask[int(end_idx)] = True
+        return mask
+    ds = np.hypot(coords[:, 0] - coords[int(start_idx), 0], coords[:, 1] - coords[int(start_idx), 1])
+    de = np.hypot(coords[:, 0] - coords[int(end_idx), 0], coords[:, 1] - coords[int(end_idx), 1])
+    return (ds <= float(radius_m)) | (de <= float(radius_m))
 
-def run_multiple_fmm_paths(
-    model: ModelData,
-    flyable: np.ndarray,
-    effective_slowness: np.ndarray,
+
+def _update_overlap_control(
+    *,
+    tree: Any,
+    coords: np.ndarray,
+    path: list[int],
     start_idx: int,
     end_idx: int,
-) -> list[PathResult]:
-    print("\n========== BUILD NEIGHBOR LIST ==========")
-    neighbors = build_neighbor_list(model, CONNECTIVITY)
-    print(f"[OK] Neighbor list built with {CONNECTIVITY}-connectivity.")
+    penalty: np.ndarray,
+    blocked: np.ndarray,
+    kwargs: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, int]:
+    action = str(_param(kwargs, "FMM2D_PREVIOUS_PATH_ACTION", "penalty")).strip().lower()
+    if action in ("none", "allow"):
+        return penalty, blocked, 0
 
-    n = len(model.df)
-    penalty_factor = np.ones(n, dtype=float)
-    extra_blocked = np.zeros(n, dtype=bool)
-    corridor_mask: np.ndarray | None = None
+    buffer_m = float(_param(kwargs, "FMM2D_PATH_BUFFER_M", _param(kwargs, "PATH_BUFFER_M", _param(kwargs, "MULTI_PATH_NON_OVERLAP_BUFFER_RADIUS_M", 150.0))))
+    endpoint_radius_m = float(_param(kwargs, "FMM2D_ENDPOINT_PROTECTION_RADIUS_M", max(buffer_m, 150.0)))
+    low_memory = _as_bool(_param(kwargs, "FMM2D_LOW_MEMORY_MODE", _param(kwargs, "LOW_MEMORY_MODE", True)))
 
-    accepted_paths: list[list[int]] = []
-    results: list[PathResult] = []
-    repeated_attempts = 0
+    mask = _nodes_within_path_buffer(tree, coords, path, buffer_m, low_memory=low_memory)
+    mask &= ~_endpoint_protection_mask(coords, start_idx, end_idx, endpoint_radius_m)
 
-    print("\n========== RUN FMM MULTI-PATH SEARCH ==========")
-    print(f"Start node: {start_idx} | label={model.df.loc[start_idx, 'label']}")
-    print(f"End node  : {end_idx} | label={model.df.loc[end_idx, 'label']}")
+    changed = int(np.count_nonzero(mask))
 
-    for attempt in range(1, MAX_PATHS + MAX_REPEATED_ATTEMPTS + 1):
-        T, parent, status = fmm_shortest_arrival(
-            model=model,
-            neighbors=neighbors,
+    if action in ("penalty", "penalize", "soft"):
+        factor = float(_param(kwargs, "FMM2D_PREVIOUS_PATH_PENALTY_FACTOR", 5.0))
+        max_factor = float(_param(kwargs, "FMM2D_MAX_PENALTY_FACTOR", 1.0e6))
+        penalty[mask] = np.minimum(penalty[mask] * factor, max_factor)
+    elif action in ("block", "hard_block", "non_overlap"):
+        blocked[mask] = True
+    else:
+        raise ValueError(
+            "FMM2D_PREVIOUS_PATH_ACTION must be 'penalty', 'block', 'hard_block', or 'none'."
+        )
+
+    blocked[int(start_idx)] = False
+    blocked[int(end_idx)] = False
+    return penalty, blocked, changed
+
+
+# ============================================================
+# Public algorithm entry point required by main.py
+# ============================================================
+
+
+def run(model: pd.DataFrame, graph: dict[str, Any], start_idx: int, end_idx: int, **kwargs) -> dict[str, Any]:
+    """Run FMM2D using the model/graph already prepared by main.py.
+
+    Parameters are read from params/FMM2D.params through parameters.py when
+    available.  Generic MULTI_PATH_* kwargs from main.py are accepted but do
+    not need to include FMM2D-specific values.
+    """
+    n = len(model)
+    start_idx = int(start_idx)
+    end_idx = int(end_idx)
+
+    if n <= 0:
+        return {"success": False, "path_indices": [], "message": "empty model"}
+
+    # One FMM2D module supports both fastest and multiple modes.
+    #
+    # Recommended control in params/FMM2D.params:
+    #   FMM2D_MODE = "fastest"  -> force one fastest path only
+    #   FMM2D_MODE = "multiple" -> use FMM2D_MAX_PATHS, including None/auto
+    #   FMM2D_MODE = "auto"     -> infer from FMM2D_MAX_PATHS
+    #
+    # FMM2D must not silently inherit MULTI_PATH_K_PATHS from astar_multiple.
+    # Default is one fastest path unless params/FMM2D.params explicitly sets
+    # FMM2D_MODE="multiple" and/or FMM2D_MAX_PATHS.
+    fmm2d_mode = str(_param(kwargs, "FMM2D_MODE", "auto")).strip().lower()
+
+    if fmm2d_mode in ("fastest", "single", "one", "best", "shortest_time"):
+        raw_max_paths = 1
+    elif fmm2d_mode in ("multiple", "multi", "alternatives", "alternative"):
+        raw_max_paths = _param(kwargs, "FMM2D_MAX_PATHS", None)
+    elif fmm2d_mode in ("auto", "from_max_paths", "default"):
+        raw_max_paths = _param(kwargs, "FMM2D_MAX_PATHS", 1)
+    else:
+        raise ValueError(
+            "FMM2D_MODE must be 'fastest', 'multiple', or 'auto'. "
+            f"Got: {fmm2d_mode!r}"
+        )
+    safety_max_paths = int(_param(kwargs, "FMM2D_MAX_PATHS_SAFETY", 100))
+    max_paths, auto_until_exhausted = _optional_positive_int(raw_max_paths, safety_max_paths)
+
+    max_rounds_per_path = int(_param(kwargs, "FMM2D_MAX_ROUNDS_PER_PATH", kwargs.get("max_rounds_per_path", 3)))
+    max_rounds_per_path = max(1, max_rounds_per_path)
+
+    max_total_attempts_default = max_paths * max_rounds_per_path
+    if auto_until_exhausted:
+        max_total_attempts_default = max(max_total_attempts_default, 2 * max_paths)
+    max_total_attempts = int(_param(kwargs, "FMM2D_MAX_TOTAL_ATTEMPTS", max_total_attempts_default))
+    max_total_attempts = max(1, max_total_attempts)
+
+    max_repeated_attempts = int(_param(kwargs, "FMM2D_MAX_REPEATED_ATTEMPTS", max_rounds_per_path))
+    max_repeated_attempts = max(1, max_repeated_attempts)
+
+    # Clause requested for clean fastest-path testing:
+    # if only one path is requested, do not apply any previous-path penalty/block.
+    previous_path_action = str(_param(kwargs, "FMM2D_PREVIOUS_PATH_ACTION", "penalty")).strip().lower()
+    if max_paths == 1 and not auto_until_exhausted:
+        previous_path_action = "none"
+        kwargs = dict(kwargs)
+        kwargs["FMM2D_PREVIOUS_PATH_ACTION"] = "none"
+
+    max_overlap = float(_param(kwargs, "FMM2D_MAX_ALLOWED_NODE_OVERLAP_RATIO", 0.85))
+    inf_time = float(_param(kwargs, "FMM2D_INF_TIME", 1.0e30))
+    max_expanded_nodes = _param(kwargs, "FMM2D_MAX_EXPANDED_NODES", kwargs.get("max_expansions", None))
+    if max_expanded_nodes is not None:
+        max_expanded_nodes = int(max_expanded_nodes)
+
+    connectivity = int(_param(kwargs, "CONNECTIVITY_2D", graph.get("connectivity", 8)))
+    low_memory = _as_bool(_param(kwargs, "FMM2D_LOW_MEMORY_MODE", _param(kwargs, "LOW_MEMORY_MODE", True)))
+    verbose = _as_bool(_param(kwargs, "FMM2D_VERBOSE", kwargs.get("verbose", True)))
+
+    xm, ym, is_lonlat = _xy_to_metric(model)
+    coords = np.column_stack([xm, ym]).copy()
+
+    active = np.asarray(_valid_mask_from_graph(model, graph), dtype=bool).copy()
+    active[start_idx] = bool(active[start_idx])
+    active[end_idx] = bool(active[end_idx])
+
+    neighbor_fn = _neighbor_function_from_graph(
+        model=model,
+        graph=graph,
+        xm=xm,
+        ym=ym,
+        valid_mask=active,
+        connectivity=connectivity,
+    )
+
+    active, isolated_blocked = _apply_isolated_special_rule(
+        model=model,
+        neighbor_fn=neighbor_fn,
+        active=active,
+        start_idx=start_idx,
+        end_idx=end_idx,
+        kwargs=kwargs,
+    )
+
+    if start_idx in isolated_blocked:
+        return {
+            "success": False,
+            "path_indices": [],
+            "path_results": [],
+            "total_cost": float("inf"),
+            "k_paths_requested": None if auto_until_exhausted else int(max_paths),
+            "k_paths_safety_cap": int(max_paths),
+            "fmm2d_auto_until_exhausted": bool(auto_until_exhausted),
+            "k_paths_found": 0,
+            "expanded_states": 0,
+            "message": "FMM2D start node is special/forced but all surrounding neighbours are no-fly.",
+            "isolated_special_blocked": isolated_blocked,
+        }
+
+    if end_idx in isolated_blocked:
+        return {
+            "success": False,
+            "path_indices": [],
+            "path_results": [],
+            "total_cost": float("inf"),
+            "k_paths_requested": max_paths,
+            "k_paths_found": 0,
+            "expanded_states": 0,
+            "message": "FMM2D end node is special/forced but all surrounding neighbours are no-fly.",
+            "isolated_special_blocked": isolated_blocked,
+        }
+
+    effective_slowness = _make_effective_slowness(
+        model=model,
+        neighbor_fn=neighbor_fn,
+        active=active,
+        start_idx=start_idx,
+        end_idx=end_idx,
+        kwargs=kwargs,
+    )
+    effective_slowness = np.asarray(effective_slowness, dtype=float).copy()
+
+    # ------------------------------------------------------------
+    # Fast path: when only one path is requested, do exactly one FMM
+    # propagation and return.  Do not build cKDTree for path buffers,
+    # do not apply overlap control, and do not enter the multi-path loop.
+    # ------------------------------------------------------------
+    if max_paths == 1 and not auto_until_exhausted:
+        previous_path_action = "none"
+        penalty = np.ones(n, dtype=float)
+        blocked = np.zeros(n, dtype=bool)
+
+        if verbose:
+            print("      FMM2D FASTEST-PATH MODE:")
+            print("        max paths        : 1")
+            print("        overlap action   : none")
+            print("        note             : no multi-path penalty/blocking is used")
+            print(f"        low memory       : {low_memory}")
+            print(f"        connectivity     : {connectivity}")
+            print(f"        active nodes     : {int(np.count_nonzero(active)):,}")
+
+        T, parent, status, expanded = _fmm_search(
+            n=n,
+            neighbor_fn=neighbor_fn,
+            active=active,
+            blocked=blocked,
+            xm=xm,
+            ym=ym,
+            slow=effective_slowness,
+            penalty=penalty,
             start_idx=start_idx,
             end_idx=end_idx,
-            flyable=flyable,
-            effective_slowness=effective_slowness,
-            penalty_factor=penalty_factor,
-            extra_blocked=extra_blocked,
-            corridor_mask=corridor_mask,
+            max_expanded_nodes=max_expanded_nodes,
+            inf_time=inf_time,
         )
 
         if status != "ok":
-            msg = f"FMM stopped: {status}"
-            print(f"[STOP] {msg}")
-            results.append(
-                PathResult(
-                    path_id=len(accepted_paths) + 1,
-                    node_indices=[],
-                    travel_time_s=float("nan"),
-                    distance_m=float("nan"),
-                    status=status,
-                    overlap_ratio=float("nan"),
-                    message=msg,
-                    arrival_time=T if SAVE_ARRIVAL_TIME_TABLES else None,
-                )
-            )
-            break
+            return {
+                "success": False,
+                "algorithm": "FMM2D",
+                "path_indices": [],
+                "path_results": [],
+                "ranked_paths": [],
+                "total_cost": float("inf"),
+                "travel_cost": float("inf"),
+                "k_paths_requested": 1,
+                "k_paths_found": 0,
+                "expanded_states": int(expanded),
+                "message": f"FMM2D failed: {status}",
+                "isolated_special_blocked": isolated_blocked,
+                "is_lonlat": bool(is_lonlat),
+                "fmm2d_previous_path_action": "none",
+            }
 
-        path = reconstruct_path(parent, start_idx, end_idx)
+        path = _reconstruct_path(parent, start_idx, end_idx)
         if not path:
-            msg = "Could not reconstruct path although end was reached."
-            print(f"[STOP] {msg}")
-            break
+            return {
+                "success": False,
+                "algorithm": "FMM2D",
+                "path_indices": [],
+                "path_results": [],
+                "ranked_paths": [],
+                "total_cost": float("inf"),
+                "travel_cost": float("inf"),
+                "k_paths_requested": 1,
+                "k_paths_found": 0,
+                "expanded_states": int(expanded),
+                "message": "FMM2D failed: path reconstruction failed",
+                "isolated_special_blocked": isolated_blocked,
+                "is_lonlat": bool(is_lonlat),
+                "fmm2d_previous_path_action": "none",
+            }
 
-        distance_m = path_distance_m(model, path)
+        distance_m = _path_distance_m(xm, ym, path)
         travel_time_s = float(T[end_idx])
-        overlap = path_overlap_ratio(path, accepted_paths)
+        item = {
+            "rank": 1,
+            "path_indices": [int(i) for i in path],
+            "total_cost": float(travel_time_s),
+            "cost": float(travel_time_s),
+            "travel_cost": float(travel_time_s),
+            "turn_cost": 0.0,
+            "turn_count": 0,
+            "total_turn_angle_degree": 0.0,
+            "nodes": int(len(path)),
+            "distance_m": float(distance_m),
+            "distance_km": float(distance_m / 1000.0),
+            "estimated_traveltime_s": float(travel_time_s),
+            "estimated_traveltime_min": float(travel_time_s / 60.0),
+            "overlap_ratio": 0.0,
+            "expanded_states": int(expanded),
+            "round_id": 1,
+            "status": "ok",
+        }
 
-        is_unique = overlap <= MAX_ALLOWED_NODE_OVERLAP_RATIO or not accepted_paths
-
-        if is_unique:
-            path_id = len(accepted_paths) + 1
-            accepted_paths.append(path)
-            result = PathResult(
-                path_id=path_id,
-                node_indices=path,
-                travel_time_s=travel_time_s,
-                distance_m=distance_m,
-                status="ok",
-                overlap_ratio=overlap,
-                message="accepted",
-                arrival_time=T if SAVE_ARRIVAL_TIME_TABLES else None,
+        if verbose:
+            print(
+                f"      FMM2D fastest path: nodes={len(path):,}, "
+                f"distance={distance_m/1000.0:.4f} km, "
+                f"time={travel_time_s:.2f} s"
             )
-            results.append(result)
+
+        return {
+            "success": True,
+            "algorithm": "FMM2D",
+            "path_indices": item["path_indices"],
+            "path_results": [item],
+            "ranked_paths": [item],
+            "total_cost": float(item["total_cost"]),
+            "travel_cost": float(item["travel_cost"]),
+            "turn_cost": 0.0,
+            "turn_count": 0,
+            "total_turn_angle_degree": 0.0,
+            "nodes": int(item["nodes"]),
+            "distance_m": float(item["distance_m"]),
+            "distance_km": float(item["distance_km"]),
+            "estimated_traveltime_s": float(item["estimated_traveltime_s"]),
+            "estimated_traveltime_min": float(item["estimated_traveltime_min"]),
+            "k_paths_requested": 1,
+            "k_paths_safety_cap": 1,
+            "fmm2d_auto_until_exhausted": False,
+            "fmm2d_total_attempts": 1,
+            "fmm2d_max_total_attempts": 1,
+            "k_paths_found": 1,
+            "expanded_states": int(expanded),
+            "message": "ok",
+            "isolated_special_blocked": isolated_blocked,
+            "is_lonlat": bool(is_lonlat),
+            "fmm2d_previous_path_action": "none",
+            "fmm2d_mode": str(fmm2d_mode),
+            "fmm2d_fastest_path_mode": True,
+        }
+
+    tree = None
+    if previous_path_action not in ("none", "allow"):
+        try:
+            from scipy.spatial import cKDTree
+            tree = cKDTree(coords)
+        except Exception as exc:
+            raise RuntimeError("FMM2D requires scipy.spatial.cKDTree for path-buffer overlap control.") from exc
+
+    penalty = np.ones(n, dtype=float)
+    blocked = np.zeros(n, dtype=bool)
+
+    accepted_paths: list[list[int]] = []
+    path_results: list[dict[str, Any]] = []
+    total_expanded = 0
+    stop_reason = ""
+
+    if verbose:
+        print("      FMM2D settings:")
+        print(f"        max paths        : {'auto/None -> ' + str(max_paths) + ' safety cap' if auto_until_exhausted else max_paths}")
+        print(f"        rounds per path  : {max_rounds_per_path}")
+        print(f"        total attempts   : {max_total_attempts}")
+        print(f"        low memory       : {low_memory}")
+        print(f"        connectivity     : {connectivity}")
+        print(f"        active nodes     : {int(np.count_nonzero(active)):,}")
+        print(f"        isolated special : {len(isolated_blocked):,}")
+        print(f"        overlap action   : {previous_path_action}")
+        if previous_path_action == "none" and max_paths == 1 and not auto_until_exhausted:
+            print("        note             : one-path mode forces overlap action = none")
+
+    # Try to accept max_paths.  If FMM2D_MAX_PATHS=None, max_paths is a safety
+    # cap and the loop stops naturally when no new acceptable path can be found.
+    # If a candidate is too similar, update penalty/block and retry for the same
+    # rank up to max_rounds_per_path / max_repeated_attempts / max_total_attempts.
+    rank = 1
+    total_attempts = 0
+    repeated_attempts = 0
+    while rank <= max_paths and total_attempts < max_total_attempts:
+        accepted_this_rank = False
+        last_status = ""
+
+        for round_id in range(1, max_rounds_per_path + 1):
+            if total_attempts >= max_total_attempts:
+                stop_reason = "max_total_attempts"
+                break
+            total_attempts += 1
+
+            T, parent, status, expanded = _fmm_search(
+                n=n,
+                neighbor_fn=neighbor_fn,
+                active=active,
+                blocked=blocked,
+                xm=xm,
+                ym=ym,
+                slow=effective_slowness,
+                penalty=penalty,
+                start_idx=start_idx,
+                end_idx=end_idx,
+                max_expanded_nodes=max_expanded_nodes,
+                inf_time=inf_time,
+            )
+            total_expanded += int(expanded)
+            last_status = status
+
+            if status != "ok":
+                stop_reason = status
+                break
+
+            path = _reconstruct_path(parent, start_idx, end_idx)
+            if not path:
+                stop_reason = "path_reconstruction_failed"
+                break
+
+            overlap = _path_overlap_ratio(path, accepted_paths)
+            if accepted_paths and overlap > max_overlap:
+                repeated_attempts += 1
+                # Penalize/block this too-similar path and retry the same rank.
+                if tree is None:
+                    changed = 0
+                else:
+                    penalty, blocked, changed = _update_overlap_control(
+                        tree=tree,
+                        coords=coords,
+                        path=path,
+                        start_idx=start_idx,
+                        end_idx=end_idx,
+                        penalty=penalty,
+                        blocked=blocked,
+                        kwargs=kwargs,
+                    )
+                if verbose:
+                    print(
+                        f"      FMM2D rank {rank:03d}, round {round_id}: "
+                        f"skip overlap={overlap:.3f}, changed={changed:,}, "
+                        f"repeated={repeated_attempts}/{max_repeated_attempts}"
+                    )
+                if changed <= 0:
+                    stop_reason = "too_similar_no_more_buffer_nodes"
+                    break
+                if repeated_attempts >= max_repeated_attempts:
+                    stop_reason = "max_repeated_attempts"
+                    break
+                continue
+
+            distance_m = _path_distance_m(xm, ym, path)
+            travel_time_s = float(T[end_idx])
+
+            item = {
+                "rank": int(rank),
+                "path_indices": [int(i) for i in path],
+                "total_cost": float(travel_time_s),
+                "cost": float(travel_time_s),
+                "travel_cost": float(travel_time_s),
+                "turn_cost": 0.0,
+                "turn_count": 0,
+                "total_turn_angle_degree": 0.0,
+                "nodes": int(len(path)),
+                "distance_m": float(distance_m),
+                "distance_km": float(distance_m / 1000.0),
+                "estimated_traveltime_s": float(travel_time_s),
+                "estimated_traveltime_min": float(travel_time_s / 60.0),
+                "overlap_ratio": float(overlap),
+                "expanded_states": int(expanded),
+                "round_id": int(round_id),
+                "status": "ok",
+            }
+            path_results.append(item)
+            accepted_paths.append(path)
             repeated_attempts = 0
 
-            print(
-                f"[PATH {path_id:03d}] nodes={len(path):,} | "
-                f"distance={distance_m/1000.0:.3f} km | "
-                f"time={travel_time_s:.2f} s | overlap={overlap:.3f}"
-            )
+            # No need to update overlap control after the final requested path.
+            if tree is not None and rank < max_paths:
+                penalty, blocked, changed = _update_overlap_control(
+                    tree=tree,
+                    coords=coords,
+                    path=path,
+                    start_idx=start_idx,
+                    end_idx=end_idx,
+                    penalty=penalty,
+                    blocked=blocked,
+                    kwargs=kwargs,
+                )
+            else:
+                changed = 0
 
-            if path_id == 1:
-                corridor_mask = make_corridor_mask_from_first_path(model, path)
-
-            penalty_factor, extra_blocked, changed = update_overlap_control(
-                model, path, start_idx, end_idx, penalty_factor, extra_blocked
-            )
-            if PREVIOUS_PATH_ACTION.lower() != "none":
+            if verbose:
                 print(
-                    f"         overlap-control={PREVIOUS_PATH_ACTION}, "
-                    f"buffer_nodes_changed={changed:,}"
+                    f"      FMM2D path {rank:03d}: nodes={len(path):,}, "
+                    f"distance={distance_m/1000.0:.4f} km, "
+                    f"time={travel_time_s:.2f} s, overlap={overlap:.3f}, "
+                    f"buffer_changed={changed:,}"
                 )
 
-            if len(accepted_paths) >= MAX_PATHS:
-                print(f"[STOP] Reached MAX_PATHS={MAX_PATHS}.")
-                break
-        else:
-            repeated_attempts += 1
-            print(
-                f"[SKIP] attempt={attempt}, too similar to previous paths "
-                f"(overlap={overlap:.3f}). Increasing overlap control."
-            )
-            penalty_factor, extra_blocked, changed = update_overlap_control(
-                model, path, start_idx, end_idx, penalty_factor, extra_blocked
-            )
-            if changed == 0 or repeated_attempts >= MAX_REPEATED_ATTEMPTS:
-                print("[STOP] No more sufficiently different paths found.")
-                break
+            accepted_this_rank = True
+            rank += 1
+            break
 
-    return [r for r in results if r.status == "ok" and r.node_indices]
+        if not accepted_this_rank:
+            if not stop_reason:
+                stop_reason = last_status or "no_more_paths"
+            break
 
+    if not path_results:
+        return {
+            "success": False,
+            "path_indices": [],
+            "path_results": [],
+            "ranked_paths": [],
+            "total_cost": float("inf"),
+            "travel_cost": float("inf"),
+            "k_paths_requested": int(max_paths),
+            "k_paths_found": 0,
+            "expanded_states": int(total_expanded),
+            "message": f"FMM2D failed: {stop_reason or 'no path found'}",
+            "isolated_special_blocked": isolated_blocked,
+            "is_lonlat": bool(is_lonlat),
+        }
 
-# ======================================================================
-# OUTPUT
-# ======================================================================
-
-def ensure_dirs() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def path_to_dataframe(model: ModelData, result: PathResult) -> pd.DataFrame:
-    idx = np.asarray(result.node_indices, dtype=int)
-    df = model.df.iloc[idx].copy().reset_index(drop=True)
-    df.insert(0, "path_id", result.path_id)
-    df.insert(1, "step", np.arange(len(df), dtype=int))
-    df.insert(2, "node_internal_index", idx)
-
-    # Add segment distance and cumulative distance.
-    seg = np.zeros(len(df), dtype=float)
-    if len(idx) > 1:
-        dx = np.diff(model.x_m[idx])
-        dy = np.diff(model.y_m[idx])
-        seg[1:] = np.hypot(dx, dy)
-    df["segment_distance_m"] = seg
-    df["cumulative_distance_m"] = np.cumsum(seg)
-    df["path_distance_m"] = result.distance_m
-    df["path_travel_time_s"] = result.travel_time_s
-    df["overlap_ratio"] = result.overlap_ratio
-    return df
-
-
-def save_outputs(model: ModelData, results: list[PathResult], start_idx: int, end_idx: int) -> None:
-    ensure_dirs()
-    start_name = str(model.df.loc[start_idx, "label"])
-    end_name = str(model.df.loc[end_idx, "label"])
-    if not start_name or start_name == "N":
-        start_name = f"node{start_idx}"
-    if not end_name or end_name == "N":
-        end_name = f"node{end_idx}"
-
-    safe_start = re.sub(r"[^A-Za-z0-9_\-]+", "_", start_name)
-    safe_end = re.sub(r"[^A-Za-z0-9_\-]+", "_", end_name)
-    prefix = f"FMM2D_from_{safe_start}_to_{safe_end}"
-
-    summary_rows = []
-    all_path_frames = []
-
-    for result in results:
-        path_df = path_to_dataframe(model, result)
-        all_path_frames.append(path_df)
-        path_file = OUTPUT_DIR / f"{prefix}_path_{result.path_id:03d}.csv"
-        path_df.to_csv(path_file, index=False)
-        print(f"[OK] Saved path: {path_file}")
-
-        summary_rows.append(
-            {
-                "path_id": result.path_id,
-                "status": result.status,
-                "nodes": len(result.node_indices),
-                "distance_m": result.distance_m,
-                "distance_km": result.distance_m / 1000.0,
-                "travel_time_s": result.travel_time_s,
-                "mean_speed_m_s": result.distance_m / result.travel_time_s
-                if result.travel_time_s > 0.0 else np.nan,
-                "overlap_ratio": result.overlap_ratio,
-                "message": result.message,
-            }
-        )
-
-        if SAVE_ARRIVAL_TIME_TABLES and result.arrival_time is not None:
-            arr_df = model.df.copy()
-            arr_df["arrival_time_s"] = result.arrival_time
-            arr_file = OUTPUT_DIR / f"{prefix}_arrival_time_{result.path_id:03d}.csv"
-            arr_df.to_csv(arr_file, index=False)
-            print(f"[OK] Saved arrival-time field: {arr_file}")
-
-    summary = pd.DataFrame(summary_rows)
-    summary_file = OUTPUT_DIR / f"{prefix}_summary.csv"
-    summary.to_csv(summary_file, index=False)
-    print(f"[OK] Saved summary: {summary_file}")
-
-    if all_path_frames:
-        all_paths = pd.concat(all_path_frames, ignore_index=True)
-        all_paths_file = OUTPUT_DIR / f"{prefix}_all_paths.csv"
-        all_paths.to_csv(all_paths_file, index=False)
-        print(f"[OK] Saved all paths: {all_paths_file}")
-
-
-def plot_results(
-    model: ModelData,
-    flyable: np.ndarray,
-    results: list[PathResult],
-    start_idx: int,
-    end_idx: int,
-) -> None:
-    if not PLOT_RESULT:
-        return
-
-    try:
-        import matplotlib.pyplot as plt
-    except Exception as exc:
-        print(f"[WARN] matplotlib is not available. Skip plotting. Error: {exc}")
-        return
-
-    ensure_dirs()
-
-    n = len(model.df)
-    rng = np.random.default_rng(12345)
-    if n > PLOT_MAX_BACKGROUND_POINTS:
-        bg_idx = rng.choice(n, size=PLOT_MAX_BACKGROUND_POINTS, replace=False)
-        bg_idx.sort()
-    else:
-        bg_idx = np.arange(n)
-
-    x = model.x_orig
-    y = model.y_orig
-
-    fig, ax = plt.subplots(figsize=(10, 9))
-
-    bg_fly = bg_idx[flyable[bg_idx]]
-    bg_nofly = bg_idx[~flyable[bg_idx]]
-
-    # User requested blue flyable and red no-fly dots in previous plotting workflow.
-    ax.scatter(x[bg_fly], y[bg_fly], s=PLOT_NODE_SIZE, c="tab:blue", alpha=0.35, label="Flyable")
-    ax.scatter(x[bg_nofly], y[bg_nofly], s=PLOT_NODE_SIZE, c="tab:red", alpha=0.35, label="No-fly")
-
-    for result in results:
-        idx = np.asarray(result.node_indices, dtype=int)
-        ax.plot(
-            x[idx],
-            y[idx],
-            linewidth=PLOT_PATH_LINEWIDTH,
-            label=f"FMM path {result.path_id:02d}",
-        )
-
-    ax.scatter(
-        [x[start_idx]], [y[start_idx]],
-        s=80, marker="*", c="gold", edgecolors="black", linewidths=0.8,
-        label=f"Start {model.df.loc[start_idx, 'label']}", zorder=10,
-    )
-    ax.scatter(
-        [x[end_idx]], [y[end_idx]],
-        s=80, marker="X", c="lime", edgecolors="black", linewidths=0.8,
-        label=f"End {model.df.loc[end_idx, 'label']}", zorder=10,
-    )
-
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel("Longitude" if model.is_lonlat else "X")
-    ax.set_ylabel("Latitude" if model.is_lonlat else "Y")
-    ax.set_title("FMM2D multiple feasible paths")
-    ax.grid(True, linewidth=0.3, alpha=0.4)
-
-    total_paths = len(results)
-    best_distance = min((r.distance_m for r in results), default=float("nan"))
-    text = (
-        f"Flyable nodes : {np.count_nonzero(flyable):,}\n"
-        f"No-fly nodes  : {np.count_nonzero(~flyable):,}\n"
-        f"Total paths   : {total_paths:,}\n"
-        f"Best distance : {best_distance/1000.0:.3f} km\n"
-        f"Rule          : slowness < {SLOWNESS_NOFLY_THRESHOLD:g}"
-    )
-    ax.text(
-        0.98, 0.98, text,
-        transform=ax.transAxes,
-        ha="right", va="top",
-        fontsize=9,
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="0.4"),
-    )
-
-    # Keep legend compact.
-    handles, labels = ax.get_legend_handles_labels()
-    if len(handles) <= 18:
-        ax.legend(loc="lower left", fontsize=8, framealpha=0.85)
-    else:
-        ax.legend(handles[:12], labels[:12], loc="lower left", fontsize=8, framealpha=0.85)
-
-    start_name = re.sub(r"[^A-Za-z0-9_\-]+", "_", str(model.df.loc[start_idx, "label"]))
-    end_name = re.sub(r"[^A-Za-z0-9_\-]+", "_", str(model.df.loc[end_idx, "label"]))
-    fig_file = FIGURE_DIR / f"FMM2D_from_{start_name}_to_{end_name}.png"
-    fig.tight_layout()
-    fig.savefig(fig_file, dpi=PLOT_DPI)
-    plt.close(fig)
-    print(f"[OK] Saved figure: {fig_file}")
-
-
-# ======================================================================
-# MAIN
-# ======================================================================
-
-def print_node_info(model: ModelData, idx: int, name: str) -> None:
-    row = model.df.iloc[idx]
-    print(
-        f"{name}: internal={idx}, original_index={row['original_index']}, "
-        f"label={row['label']}, x={row['x']}, y={row['y']}, "
-        f"slowness={row['slowness']}"
-    )
-
-
-def main() -> None:
-    print("=" * 70)
-    print("FMM2D PATH TRACING")
-    print("=" * 70)
-    print(f"Model file : {MODEL_FILE}")
-    print(f"Output dir : {OUTPUT_DIR}")
-    print(f"Figure dir : {FIGURE_DIR}")
-
-    df = read_model_file(MODEL_FILE)
-    model = build_model_data(df)
-
-    start_idx, end_idx = resolve_start_end(model)
-    print("\n========== START / END ==========")
-    print_node_info(model, start_idx, "START")
-    print_node_info(model, end_idx, "END")
-
-    flyable, effective_slowness, fly_stats = apply_flyable_rules(model, start_idx, end_idx)
-
-    print("\n========== FLYABLE RULE ==========")
-    print(f"No-fly threshold                    : slowness >= {SLOWNESS_NOFLY_THRESHOLD:g}")
-    print(f"Base flyable nodes                  : {fly_stats['base_flyable']:,}")
-    print(f"Base no-fly nodes                   : {fly_stats['base_nofly']:,}")
-    print(f"Forced DB/DK/BD already flyable     : {fly_stats['forced_endpoint_already_flyable']:,}")
-    print(f"Forced DB/DK/BD changed to flyable  : {fly_stats['forced_endpoint_flyable']:,}")
-    print(f"Forced DB/DK/BD kept no-fly isolated: {fly_stats['forced_endpoint_kept_blocked_isolated']:,}")
-    print(f"Final flyable nodes                 : {np.count_nonzero(flyable):,}")
-    print(f"Final no-fly nodes                  : {np.count_nonzero(~flyable):,}")
-
-    if not flyable[start_idx]:
-        print("\n[ERROR] Start node is no-fly after isolation check. No path can start.")
-        return
-    if not flyable[end_idx]:
-        print("\n[ERROR] End node is no-fly after isolation check. No path can end.")
-        return
-
-    results: list[PathResult] = []
-    if RUN_FMM_PATH_CALCULATION:
-        results = run_multiple_fmm_paths(
-            model=model,
-            flyable=flyable,
-            effective_slowness=effective_slowness,
-            start_idx=start_idx,
-            end_idx=end_idx,
-        )
-        if results:
-            save_outputs(model, results, start_idx, end_idx)
-        else:
-            print("[WARN] No path results to save.")
-    else:
-        print("[INFO] RUN_FMM_PATH_CALCULATION=False, skip path search.")
-
-    if PLOT_RESULT:
-        plot_results(model, flyable, results, start_idx, end_idx)
-
-    print("\n[DONE] FMM2D finished.")
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[STOP] Interrupted by user.")
-        sys.exit(130)
-    except Exception as exc:
-        print(f"\n[ERROR] {exc}")
-        raise
+    best = path_results[0]
+    result = {
+        "success": True,
+        "algorithm": "FMM2D",
+        "path_indices": best["path_indices"],
+        "path_results": path_results,
+        "ranked_paths": path_results,
+        "total_cost": float(best["total_cost"]),
+        "travel_cost": float(best["travel_cost"]),
+        "turn_cost": 0.0,
+        "turn_count": 0,
+        "total_turn_angle_degree": 0.0,
+        "nodes": int(best["nodes"]),
+        "distance_m": float(best["distance_m"]),
+        "distance_km": float(best["distance_km"]),
+        "estimated_traveltime_s": float(best["estimated_traveltime_s"]),
+        "estimated_traveltime_min": float(best["estimated_traveltime_min"]),
+        "k_paths_requested": None if auto_until_exhausted else int(max_paths),
+        "k_paths_safety_cap": int(max_paths),
+        "fmm2d_auto_until_exhausted": bool(auto_until_exhausted),
+        "fmm2d_total_attempts": int(total_attempts),
+        "fmm2d_max_total_attempts": int(max_total_attempts),
+        "k_paths_found": int(len(path_results)),
+        "expanded_states": int(total_expanded),
+        "message": "ok" if len(path_results) >= max_paths else f"stopped: {stop_reason or 'max paths reached'}",
+        "isolated_special_blocked": isolated_blocked,
+        "is_lonlat": bool(is_lonlat),
+        "fmm2d_previous_path_action": str(previous_path_action),
+        "fmm2d_mode": str(fmm2d_mode),
+        "fmm2d_fastest_path_mode": False,
+    }
+    return result
