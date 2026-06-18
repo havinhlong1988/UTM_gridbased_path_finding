@@ -1,0 +1,60 @@
+# ============================================================
+# params/FMM.params
+# True grid-based Fast Marching Method settings for src/FMM.py
+# ============================================================
+
+# Mode:
+#   "fastest"  -> one true FMM solve and one raypath from B to A
+#   "multiple" -> repeated FMM solves with penalty/block around previous rays
+FMM_MODE = "fastest"
+
+# Fastest mode:
+#   FMM_MAX_PATHS = 1 gives only the fastest first-arrival raypath.
+# Multiple mode:
+#   FMM_MAX_PATHS = 10 gives 10 alternatives if possible.
+# Auto mode:
+#   FMM_MAX_PATHS = None searches until exhausted or safety limit.
+FMM_MAX_PATHS = 1
+FMM_MAX_PATHS_SAFETY = 50
+FMM_MAX_TOTAL_ATTEMPTS = 150
+FMM_MAX_REPEATED_ATTEMPTS = 20
+FMM_MAX_ROUNDS_PER_PATH = 3
+
+# No-fly handling:
+#   "hard"          = blocked no-fly cells; recommended for real UAV operation.
+#   "high_slowness" = no-fly cells remain but get very high slowness.
+#                     The raypath avoids them because arrival time is very high,
+#                     but it may still cross if no better route exists.
+FMM_NOFLY_MODE = "hard"
+FMM_NOFLY_HIGH_SLOWNESS = 10000.0
+FMM_BLOCK_NONFINITE_SLOWNESS = True
+
+# Fallback slowness for DB/DK/BD/FLZ endpoints when their stored value is no-fly.
+FMM_FLYABLE_SLOWNESS_FALLBACK = float(globals().get("FLYABLE_SLOWNESS", 0.085))
+
+# True FMM solve controls.
+FMM_INF_TIME = 1.0e30
+FMM_STOP_AT_END = True
+FMM_MAX_ACCEPTED_CELLS = None
+
+# Ray tracing from arrival-time field:
+#   "gradient" = follow negative gradient of T, with robust neighbour fallback.
+#   "steepest" = simpler cell-to-cell descent in T.
+FMM_BACKTRACE_MODE = "gradient"
+FMM_BACKTRACE_STEP_FACTOR = 0.50
+FMM_MAX_TRACE_STEPS = 100000
+
+# Multiple-ray controls.
+# If FMM_MAX_PATHS = 1, src/FMM.py automatically treats this as "none".
+FMM_PREVIOUS_PATH_ACTION = "penalty"   # "none", "penalty", or "block"
+FMM_PATH_BUFFER_M = 150.0
+FMM_ENDPOINT_PROTECTION_RADIUS_M = 250.0
+FMM_PREVIOUS_PATH_PENALTY_FACTOR = 5.0
+FMM_MAX_SLOWNESS = 1.0e12
+FMM_MAX_ALLOWED_NODE_OVERLAP_RATIO = 0.85
+
+# Runtime / diagnostics.
+FMM_LOW_MEMORY_MODE = bool(globals().get("LOW_MEMORY_MODE", True))
+FMM_USE_MULTICORE = False
+FMM_MAX_WORKERS = 1
+FMM_VERBOSE = True

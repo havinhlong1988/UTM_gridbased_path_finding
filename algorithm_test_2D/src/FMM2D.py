@@ -5,6 +5,9 @@ src/FMM2D.py
 
 FMM/Fast-Marching-style path search module for the LAE-UTM main.py protocol.
 
+Fast-Marching-style / Dijkstra label-setting on a 2D node graph Not true continuous Fast Marching Method.
+
+
 This file is NOT a standalone runner.  It is called by main.py as:
 
     result = src.FMM2D.run(model=model, graph=graph, start_idx=i, end_idx=j, **kwargs)
