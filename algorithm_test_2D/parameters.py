@@ -56,6 +56,11 @@ RUN_MODE = "full"
 # ============================================================
 # Possible path connection settings
 # ============================================================
+# Master switch:
+# True  = calculate possible DB/DK/DK-DK path connections and plot figure
+# False = skip this step completely in main.py
+RUN_POSSIBLE_PATH_CALCULATION = True
+
 
 SCENARIO_NAME = "senario1"
 
@@ -93,6 +98,37 @@ PATH_COLORBAR_SHRINK = 0.82
 PATH_COLORBAR_FRACTION = 0.045
 PATH_COLORBAR_PAD = 0.02
 PATH_COLORBAR_ASPECT = 28
+# ============================================================
+# Path candidate access check
+# ============================================================
+
+# Use the official model columns directly here.
+# Do not use PATH_MODEL_COLUMNS = MODEL_COLUMNS if this block appears before MODEL_COLUMNS.
+PATH_MODEL_COLUMNS = ("lon", "lat", "z", "slowness", "label")
+
+PATH_SLOWNESS_COLUMN = "slowness"
+
+# Same no-fly rule as path planning.
+PATH_NO_FLY_SLOWNESS_THRESHOLD = 10.0
+PATH_NO_FLY_THRESHOLD_MODE = "greater_equal"
+PATH_NO_FLY_SLOWNESS_TOLERANCE = 1e-9
+
+# DB/DK must have at least one nearby normal flyable grid cell.
+# For 50 m grid and 8-neighbor logic, 80 m is good.
+PATH_NODE_ACCESS_RADIUS_M = 80.0
+PATH_MIN_FLYABLE_NEIGHBORS = 1
+
+# Do not count DB/DK/FLZ labels as normal flyable access cells.
+# They can be forced flyable, so counting them may hide a no-fly-covered facility.
+PATH_ACCESS_EXCLUDE_PREFIXES = ("DB", "DK", "FLZ")
+
+PATH_NODE_STATUS_CSV = DAT_ROOT_DIR / "path_node_status.csv"
+
+# Background flyable / no-fly dots
+PATH_BACKGROUND_MARKER_SIZE = 4.0
+PATH_BACKGROUND_ALPHA = 0.55
+
+PATH_STATUS_BOX_LOCATION = "upper right"
 # ============================================================
 # Algorithm selection
 # ============================================================

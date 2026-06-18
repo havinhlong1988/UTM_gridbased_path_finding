@@ -2022,10 +2022,18 @@ def run_one_algorithm(algorithm_name):
 def main():
 
     # ============================================================
-    # Step: create possible DB/DK path connection table
+    # Possible DB/DK path connection calculation
     # ============================================================
+    paths_df = None
+    nodes_df = None
 
-    paths_df, nodes_df = create_possible_paths(prm)
+    if getattr(prm, "RUN_POSSIBLE_PATH_CALCULATION", True):
+        paths_df, nodes_df = create_possible_paths(prm)
+    else:
+        print("\n[SKIP] Possible DB/DK path connection calculation is disabled.")
+        print("       Set RUN_POSSIBLE_PATH_CALCULATION = True in parameters.py to enable it.")
+        paths_df, nodes_df = None, None
+        
     # Check the algorithms name
     algorithms = normalize_algorithm_names(get_param("ALGORITHM", "astar"))
 

@@ -6,7 +6,7 @@
   "total_cost": null,
   "expanded_nodes": 1,
   "visited_nodes": 1,
-  "runtime_seconds": 0.19464659690856934,
+  "runtime_seconds": 0.2107994556427002,
   "real_start_idx": 15435,
   "real_end_idx": 15437,
   "search_start_idx": 15435,
