@@ -5,9 +5,6 @@ src/FMM2D.py
 
 FMM/Fast-Marching-style path search module for the LAE-UTM main.py protocol.
 
-Fast-Marching-style / Dijkstra label-setting on a 2D node graph Not true continuous Fast Marching Method.
-
-
 This file is NOT a standalone runner.  It is called by main.py as:
 
     result = src.FMM2D.run(model=model, graph=graph, start_idx=i, end_idx=j, **kwargs)
@@ -23,6 +20,8 @@ module can reject a forced special node when all surrounding neighbours are
 blocked/no-fly.
 
 Returned result format is compatible with the existing export/plot section in
+main.py. It supports selected-pair mode and facility-pair library mode.
+
 main.py:
     - result["path_indices"]          : best path
     - result["path_results"]          : ranked paths, if multiple paths found
@@ -661,6 +660,595 @@ def _update_overlap_control(
     return penalty, blocked, changed
 
 
+
+# ============================================================
+# Facility-pair library mode
+# ============================================================
+
+
+def _normalize_label_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() in ("none", "null", ""):
+        return ""
+    return text.upper()
+
+
+def _node_label(model: pd.DataFrame, idx: int) -> str:
+    labels = _label_array(model)
+    if 0 <= int(idx) < len(labels):
+        return str(labels[int(idx)])
+    return f"node{idx}"
+
+
+def _facility_indices(model: pd.DataFrame, prefixes: tuple[str, ...]) -> list[int]:
+    """Return model indices whose label or label_prefix starts with one of prefixes."""
+    prefixes = tuple(str(p).upper() for p in prefixes if str(p))
+    if not prefixes:
+        return []
+
+    labels = _label_array(model).astype(str)
+    label_prefixes = _label_prefix_array(model).astype(str)
+    mask = np.zeros(len(model), dtype=bool)
+    for p in prefixes:
+        mask |= np.char.startswith(np.char.upper(labels), p)
+        mask |= np.char.startswith(np.char.upper(label_prefixes), p)
+
+    indices = [int(i) for i in np.flatnonzero(mask)]
+    indices.sort(key=lambda i: (_node_label(model, i), i))
+    return indices
+
+
+def _build_facility_pairs(
+    model: pd.DataFrame,
+    db_indices: list[int],
+    dk_indices: list[int],
+    include_db_dk: bool,
+    include_db_db: bool,
+    include_dk_dk: bool,
+    include_reverse: bool,
+    *,
+    min_distance_m: float = 0.0,
+    skip_same_label: bool = True,
+    skip_same_coord: bool = True,
+    same_coord_tolerance_m: float = 1.0,
+    dedup_two_way: bool = True,
+) -> list[dict[str, Any]]:
+    """Build requested facility source-target pair definitions.
+
+    The facility-library mode should never create a path from a node/facility
+    to itself. This also catches duplicate labels such as DK04 -> DK04 when the
+    model contains more than one row with the same operational label.
+    """
+    pairs: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, str]] = set()
+    seen_two_way: set[tuple[str, str, str]] = set()
+
+    try:
+        xm_pair, ym_pair, _ = _xy_to_metric(model)
+    except Exception:
+        xm_pair = ym_pair = None
+
+    def too_close_or_same(src: int, dst: int) -> tuple[bool, float]:
+        src = int(src)
+        dst = int(dst)
+        if src == dst:
+            return True, 0.0
+
+        src_label_norm = _normalize_label_text(_node_label(model, src))
+        dst_label_norm = _normalize_label_text(_node_label(model, dst))
+        if skip_same_label and src_label_norm and src_label_norm == dst_label_norm:
+            return True, 0.0
+
+        dist_m = float("nan")
+        if xm_pair is not None and ym_pair is not None:
+            try:
+                dist_m = float(math.hypot(float(xm_pair[dst] - xm_pair[src]), float(ym_pair[dst] - ym_pair[src])))
+            except Exception:
+                dist_m = float("nan")
+
+        if np.isfinite(dist_m):
+            if skip_same_coord and dist_m <= float(same_coord_tolerance_m):
+                return True, dist_m
+            if float(min_distance_m) > 0.0 and dist_m < float(min_distance_m):
+                return True, dist_m
+
+        return False, dist_m
+
+    def two_way_key(src: int, dst: int, pair_type: str) -> tuple[str, str, str]:
+        """Canonical key used to drop duplicate reverse-direction paths.
+
+        Example: DB01->DK01 and DK01->DB01 share the same key and only
+        the first one is kept.  Labels are used when available so duplicate
+        facility rows are also de-duplicated cleanly.
+        """
+        src_label = _normalize_label_text(_node_label(model, int(src))) or str(int(src))
+        dst_label = _normalize_label_text(_node_label(model, int(dst))) or str(int(dst))
+
+        # Treat DB_DK and DK_DB as the same operational pair family.
+        pt = str(pair_type).upper()
+        if pt in ("DB_DK", "DK_DB"):
+            family = "DB_DK"
+        else:
+            family = pt
+
+        a, b = sorted((src_label, dst_label))
+        return (family, a, b)
+
+    def add(src: int, dst: int, pair_type: str) -> None:
+        src = int(src)
+        dst = int(dst)
+
+        skip, direct_distance_m = too_close_or_same(src, dst)
+        if skip:
+            return
+
+        if dedup_two_way:
+            ukey = two_way_key(src, dst, pair_type)
+            if ukey in seen_two_way:
+                return
+            seen_two_way.add(ukey)
+
+        key = (src, dst, pair_type)
+        if key in seen:
+            return
+        seen.add(key)
+
+        src_label = _node_label(model, src)
+        dst_label = _node_label(model, dst)
+        pairs.append({
+            "source_idx": src,
+            "target_idx": dst,
+            "source_label": src_label,
+            "target_label": dst_label,
+            "pair_type": pair_type,
+            "pair_key": f"{src_label}->{dst_label}",
+            "pair_undirected_key": "--".join(two_way_key(src, dst, pair_type)),
+            "direct_distance_m": float(direct_distance_m) if np.isfinite(direct_distance_m) else float("nan"),
+        })
+
+    if include_db_dk:
+        for db in db_indices:
+            for dk in dk_indices:
+                add(db, dk, "DB_DK")
+                if include_reverse:
+                    add(dk, db, "DK_DB")
+
+    if include_db_db:
+        for a_pos, a in enumerate(db_indices):
+            for b in db_indices[a_pos + 1:]:
+                add(a, b, "DB_DB")
+                if include_reverse:
+                    add(b, a, "DB_DB")
+
+    if include_dk_dk:
+        for a_pos, a in enumerate(dk_indices):
+            for b in dk_indices[a_pos + 1:]:
+                add(a, b, "DK_DK")
+                if include_reverse:
+                    add(b, a, "DK_DK")
+
+    return pairs
+
+def _fmm_search_from_source_to_targets(
+    *,
+    n: int,
+    neighbor_fn: Callable[[int], list[int]],
+    active: np.ndarray,
+    blocked: np.ndarray,
+    xm: np.ndarray,
+    ym: np.ndarray,
+    slow: np.ndarray,
+    penalty: np.ndarray,
+    source_idx: int,
+    target_indices: Iterable[int],
+    max_expanded_nodes: int | None,
+    inf_time: float,
+) -> tuple[np.ndarray, np.ndarray, str, int]:
+    """One-source FMM/Dijkstra propagation stopped after all targets are accepted.
+
+    This is the efficient facility-pair mode: one propagation from DB01 can
+    extract DB01->DK01, DB01->DK02, DB01->DB02, etc., instead of rerunning for
+    every source-target pair.
+    """
+    source_idx = int(source_idx)
+    targets = {int(t) for t in target_indices if 0 <= int(t) < n and int(t) != source_idx}
+    usable = active.copy() & (~blocked)
+
+    T = np.full(n, float(inf_time), dtype=float)
+    parent = np.full(n, -1, dtype=np.int64)
+
+    if source_idx < 0 or source_idx >= n or not bool(usable[source_idx]):
+        return T, parent, "source_blocked", 0
+
+    targets = {t for t in targets if bool(usable[t])}
+    if not targets:
+        return T, parent, "no_active_targets", 0
+
+    accepted = np.zeros(n, dtype=bool)
+    T[source_idx] = 0.0
+    heap: list[tuple[float, int]] = [(0.0, source_idx)]
+    remaining = set(targets)
+    expanded = 0
+
+    while heap:
+        t_i, i = heapq.heappop(heap)
+        if accepted[i]:
+            continue
+        if t_i > T[i]:
+            continue
+
+        accepted[i] = True
+        expanded += 1
+
+        if i in remaining:
+            remaining.remove(i)
+            if not remaining:
+                return T, parent, "ok", expanded
+
+        if max_expanded_nodes is not None and expanded >= int(max_expanded_nodes):
+            return T, parent, "max_expanded_nodes", expanded
+
+        for j in neighbor_fn(i):
+            jj = int(j)
+            if jj < 0 or jj >= n:
+                continue
+            if accepted[jj] or not usable[jj]:
+                continue
+            c = _edge_cost_s(xm, ym, slow, penalty, i, jj)
+            if not np.isfinite(c):
+                continue
+            cand = t_i + c
+            if cand < T[jj]:
+                T[jj] = cand
+                parent[jj] = int(i)
+                heapq.heappush(heap, (float(cand), jj))
+
+    return T, parent, "partial" if len(remaining) < len(targets) else "unreachable", expanded
+
+
+def _select_requested_pair_results(
+    model: pd.DataFrame,
+    pair_results: list[dict[str, Any]],
+    start_idx: int,
+    end_idx: int,
+    kwargs: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Filter all pair results to the requested START_LABEL -> END_LABEL pair."""
+    req_start_label = _normalize_label_text(_param(kwargs, "START_LABEL", None))
+    req_end_label = _normalize_label_text(_param(kwargs, "END_LABEL", None))
+
+    if req_start_label and req_end_label:
+        selected = [
+            item for item in pair_results
+            if _normalize_label_text(item.get("source_label")) == req_start_label
+            and _normalize_label_text(item.get("target_label")) == req_end_label
+        ]
+        if selected:
+            return selected
+
+    return [
+        item for item in pair_results
+        if int(item.get("source_idx", -1)) == int(start_idx)
+        and int(item.get("target_idx", -1)) == int(end_idx)
+    ]
+
+
+def _run_facility_pair_library(
+    model: pd.DataFrame,
+    graph: dict[str, Any],
+    start_idx: int,
+    end_idx: int,
+    **kwargs,
+) -> dict[str, Any]:
+    """Compute fastest paths for all DB/DK facility pairs in one-source batches.
+
+    Returned paths are normal `path_results`, so existing main.py can export
+    them as ranked path CSVs. This mode computes one fastest path per pair;
+    alternative paths for a single selected pair are still handled by normal
+    FMM2D multiple mode.
+    """
+    n = len(model)
+    start_idx = int(start_idx)
+    end_idx = int(end_idx)
+
+    db_prefixes = tuple(_param(kwargs, "FMM2D_PAIR_DB_PREFIXES", ("DB",)))
+    dk_prefixes = tuple(_param(kwargs, "FMM2D_PAIR_DK_PREFIXES", ("DK",)))
+
+    include_db_dk = _as_bool(_param(kwargs, "FMM2D_PAIR_INCLUDE_DB_DK", True))
+    include_db_db = _as_bool(_param(kwargs, "FMM2D_PAIR_INCLUDE_DB_DB", True))
+    include_dk_dk = _as_bool(_param(kwargs, "FMM2D_PAIR_INCLUDE_DK_DK", True))
+    include_reverse = _as_bool(_param(kwargs, "FMM2D_PAIR_INCLUDE_REVERSE", False))
+
+    return_mode = str(_param(kwargs, "FMM2D_PAIR_RETURN_MODE", "requested")).strip().lower()
+    if return_mode in ("auto", "default"):
+        s_label = _normalize_label_text(_param(kwargs, "START_LABEL", None))
+        e_label = _normalize_label_text(_param(kwargs, "END_LABEL", None))
+        return_mode = "requested" if (s_label and e_label) else "all"
+
+    max_pair_results_raw = _param(kwargs, "FMM2D_PAIR_MAX_RESULTS", None)
+    max_pair_results = None if _is_none_like(max_pair_results_raw) else int(max_pair_results_raw)
+
+    inf_time = float(_param(kwargs, "FMM2D_INF_TIME", 1.0e30))
+    max_expanded_nodes = _param(kwargs, "FMM2D_PAIR_MAX_EXPANDED_NODES", _param(kwargs, "FMM2D_MAX_EXPANDED_NODES", kwargs.get("max_expansions", None)))
+    if max_expanded_nodes is not None:
+        max_expanded_nodes = int(max_expanded_nodes)
+    connectivity = int(_param(kwargs, "CONNECTIVITY_2D", graph.get("connectivity", 8)))
+    low_memory = _as_bool(_param(kwargs, "FMM2D_LOW_MEMORY_MODE", _param(kwargs, "LOW_MEMORY_MODE", True)))
+    verbose = _as_bool(_param(kwargs, "FMM2D_VERBOSE", kwargs.get("verbose", True)))
+
+    xm, ym, is_lonlat = _xy_to_metric(model)
+    active = _valid_mask_from_graph(model, graph)
+
+    neighbor_fn = _neighbor_function_from_graph(
+        model=model,
+        graph=graph,
+        xm=xm,
+        ym=ym,
+        valid_mask=active,
+        connectivity=connectivity,
+    )
+
+    active, isolated_blocked = _apply_isolated_special_rule(
+        model=model,
+        neighbor_fn=neighbor_fn,
+        active=active,
+        start_idx=start_idx,
+        end_idx=end_idx,
+        kwargs=kwargs,
+    )
+
+    effective_slowness = _make_effective_slowness(
+        model=model,
+        neighbor_fn=neighbor_fn,
+        active=active,
+        start_idx=start_idx,
+        end_idx=end_idx,
+        kwargs=kwargs,
+    )
+
+    db_nodes_all = _facility_indices(model, db_prefixes)
+    dk_nodes_all = _facility_indices(model, dk_prefixes)
+    db_nodes = [i for i in db_nodes_all if bool(active[int(i)])]
+    dk_nodes = [i for i in dk_nodes_all if bool(active[int(i)])]
+
+    pair_min_distance_m = float(_param(kwargs, "FMM2D_PAIR_MIN_DISTANCE_M", 0.0))
+    pair_skip_same_label = _as_bool(_param(kwargs, "FMM2D_PAIR_SKIP_SAME_LABEL", True))
+    pair_skip_same_coord = _as_bool(_param(kwargs, "FMM2D_PAIR_SKIP_SAME_COORD", True))
+    pair_same_coord_tolerance_m = float(_param(kwargs, "FMM2D_PAIR_SAME_COORD_TOLERANCE_M", 1.0))
+    pair_dedup_two_way = _as_bool(_param(kwargs, "FMM2D_PAIR_DEDUP_TWO_WAY", True))
+
+    pair_defs = _build_facility_pairs(
+        model=model,
+        db_indices=db_nodes,
+        dk_indices=dk_nodes,
+        include_db_dk=include_db_dk,
+        include_db_db=include_db_db,
+        include_dk_dk=include_dk_dk,
+        include_reverse=include_reverse,
+        min_distance_m=pair_min_distance_m,
+        skip_same_label=pair_skip_same_label,
+        skip_same_coord=pair_skip_same_coord,
+        same_coord_tolerance_m=pair_same_coord_tolerance_m,
+        dedup_two_way=pair_dedup_two_way,
+    )
+
+    if verbose:
+        print("      FMM2D FACILITY-PAIR LIBRARY MODE:")
+        print(f"        DB prefixes       : {db_prefixes}")
+        print(f"        DK prefixes       : {dk_prefixes}")
+        print(f"        active DB nodes   : {len(db_nodes):,} / {len(db_nodes_all):,}")
+        print(f"        active DK nodes   : {len(dk_nodes):,} / {len(dk_nodes_all):,}")
+        print(f"        candidate pairs   : {len(pair_defs):,}")
+        print(f"        return mode       : {return_mode}")
+        print(f"        skip same label   : {pair_skip_same_label}")
+        print(f"        skip same coord   : {pair_skip_same_coord} <= {pair_same_coord_tolerance_m:.3f} m")
+        print(f"        de-dup 2-way     : {pair_dedup_two_way}")
+        print(f"        min pair distance : {pair_min_distance_m:.3f} m")
+        print(f"        low memory        : {low_memory}")
+        print("        strategy          : one FMM propagation per unique source, then extract all targets")
+
+    if not pair_defs:
+        return {
+            "success": False,
+            "algorithm": "FMM2D",
+            "path_indices": [],
+            "path_results": [],
+            "ranked_paths": [],
+            "total_cost": float("inf"),
+            "travel_cost": float("inf"),
+            "k_paths_found": 0,
+            "expanded_states": 0,
+            "message": "FMM2D facility-pair mode found no active DB/DK pairs.",
+            "isolated_special_blocked": isolated_blocked,
+            "fmm2d_pair_mode": True,
+        }
+
+    targets_by_source: dict[int, list[int]] = {}
+    pair_lookup: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for pair in pair_defs:
+        src = int(pair["source_idx"])
+        dst = int(pair["target_idx"])
+        targets_by_source.setdefault(src, []).append(dst)
+        pair_lookup.setdefault((src, dst), []).append(pair)
+
+    penalty = np.ones(n, dtype=float)
+    blocked = np.zeros(n, dtype=bool)
+    total_expanded = 0
+    path_results: list[dict[str, Any]] = []
+    unreachable_pairs: list[dict[str, Any]] = []
+
+    for source_rank, (src, targets) in enumerate(sorted(targets_by_source.items(), key=lambda kv: (_node_label(model, kv[0]), kv[0])), start=1):
+        unique_targets = sorted(set(int(t) for t in targets), key=lambda i: (_node_label(model, i), i))
+        if verbose:
+            print(f"        source {source_rank:03d}: {_node_label(model, src)} -> {len(unique_targets):,} targets")
+
+        T, parent, status, expanded = _fmm_search_from_source_to_targets(
+            n=n,
+            neighbor_fn=neighbor_fn,
+            active=active,
+            blocked=blocked,
+            xm=xm,
+            ym=ym,
+            slow=effective_slowness,
+            penalty=penalty,
+            source_idx=src,
+            target_indices=unique_targets,
+            max_expanded_nodes=max_expanded_nodes,
+            inf_time=inf_time,
+        )
+        total_expanded += int(expanded)
+
+        for dst in unique_targets:
+            pair_items = pair_lookup.get((src, dst), [])
+            if not pair_items:
+                continue
+            if not np.isfinite(T[int(dst)]) or T[int(dst)] >= inf_time or parent[int(dst)] < 0:
+                for pair in pair_items:
+                    unreachable_pairs.append(dict(pair, status="unreachable", source_status=status))
+                continue
+
+            path = _reconstruct_path(parent, src, dst)
+            if not path:
+                for pair in pair_items:
+                    unreachable_pairs.append(dict(pair, status="path_reconstruction_failed", source_status=status))
+                continue
+
+            distance_m = _path_distance_m(xm, ym, path)
+            travel_time_s = float(T[int(dst)])
+            for pair in pair_items:
+                item = {
+                    "rank": 0,
+                    "path_indices": [int(i) for i in path],
+                    "total_cost": float(travel_time_s),
+                    "cost": float(travel_time_s),
+                    "travel_cost": float(travel_time_s),
+                    "turn_cost": 0.0,
+                    "turn_count": 0,
+                    "total_turn_angle_degree": 0.0,
+                    "nodes": int(len(path)),
+                    "distance_m": float(distance_m),
+                    "distance_km": float(distance_m / 1000.0),
+                    "estimated_traveltime_s": float(travel_time_s),
+                    "estimated_traveltime_min": float(travel_time_s / 60.0),
+                    "overlap_ratio": 0.0,
+                    "expanded_states": int(expanded),
+                    "round_id": 1,
+                    "status": "ok",
+                    "source_idx": int(src),
+                    "target_idx": int(dst),
+                    "source_label": pair["source_label"],
+                    "target_label": pair["target_label"],
+                    "pair_type": pair["pair_type"],
+                    "pair_key": pair["pair_key"],
+                    "pair_undirected_key": str(pair.get("pair_undirected_key", "")),
+                    "direct_distance_m": float(pair.get("direct_distance_m", float("nan"))),
+                    "source_fmm_status": status,
+                }
+                path_results.append(item)
+
+    path_results.sort(key=lambda item: (float(item["total_cost"]), item["pair_type"], item["source_label"], item["target_label"]))
+    for rank, item in enumerate(path_results, start=1):
+        item["rank"] = int(rank)
+
+    if max_pair_results is not None:
+        path_results = path_results[:max_pair_results]
+
+    all_pair_count = len(path_results)
+    if return_mode in ("requested", "selected", "request", "one"):
+        selected = _select_requested_pair_results(model, path_results, start_idx, end_idx, kwargs)
+        if selected:
+            path_results = selected
+            for rank, item in enumerate(path_results, start=1):
+                item["rank"] = int(rank)
+        else:
+            return {
+                "success": False,
+                "algorithm": "FMM2D",
+                "path_indices": [],
+                "path_results": [],
+                "ranked_paths": [],
+                "total_cost": float("inf"),
+                "travel_cost": float("inf"),
+                "k_paths_found": 0,
+                "expanded_states": int(total_expanded),
+                "message": "FMM2D facility-pair mode computed the library, but the requested START_LABEL -> END_LABEL pair was not found/reachable.",
+                "unreachable_pairs_count": int(len(unreachable_pairs)),
+                "all_pair_paths_found": int(all_pair_count),
+                "isolated_special_blocked": isolated_blocked,
+                "is_lonlat": bool(is_lonlat),
+                "fmm2d_pair_mode": True,
+                "fmm2d_pair_return_mode": str(return_mode),
+            }
+    elif return_mode not in ("all", "library", "all_pairs"):
+        raise ValueError("FMM2D_PAIR_RETURN_MODE must be 'requested', 'all', or 'auto'.")
+
+    if not path_results:
+        return {
+            "success": False,
+            "algorithm": "FMM2D",
+            "path_indices": [],
+            "path_results": [],
+            "ranked_paths": [],
+            "total_cost": float("inf"),
+            "travel_cost": float("inf"),
+            "k_paths_found": 0,
+            "expanded_states": int(total_expanded),
+            "message": "FMM2D facility-pair mode found no reachable pair paths.",
+            "unreachable_pairs_count": int(len(unreachable_pairs)),
+            "isolated_special_blocked": isolated_blocked,
+            "is_lonlat": bool(is_lonlat),
+            "fmm2d_pair_mode": True,
+        }
+
+    best = path_results[0]
+    if verbose:
+        print("      FMM2D facility-pair result:")
+        print(f"        returned paths    : {len(path_results):,}")
+        print(f"        all found paths   : {all_pair_count:,}")
+        print(f"        unreachable pairs : {len(unreachable_pairs):,}")
+        print(f"        first path        : {best.get('pair_key')} | time={best.get('total_cost'):.2f} s")
+
+    return {
+        "success": True,
+        "algorithm": "FMM2D",
+        "path_indices": best["path_indices"],
+        "path_results": path_results,
+        "ranked_paths": path_results,
+        "total_cost": float(best["total_cost"]),
+        "travel_cost": float(best["travel_cost"]),
+        "turn_cost": 0.0,
+        "turn_count": 0,
+        "total_turn_angle_degree": 0.0,
+        "nodes": int(best["nodes"]),
+        "distance_m": float(best["distance_m"]),
+        "distance_km": float(best["distance_km"]),
+        "estimated_traveltime_s": float(best["estimated_traveltime_s"]),
+        "estimated_traveltime_min": float(best["estimated_traveltime_min"]),
+        "k_paths_requested": int(len(path_results)),
+        "k_paths_found": int(len(path_results)),
+        "expanded_states": int(total_expanded),
+        "message": "ok",
+        "isolated_special_blocked": isolated_blocked,
+        "is_lonlat": bool(is_lonlat),
+        "fmm2d_pair_mode": True,
+        "fmm2d_pair_return_mode": str(return_mode),
+        "all_pair_paths_found": int(all_pair_count),
+        "unreachable_pairs_count": int(len(unreachable_pairs)),
+        "fmm2d_pair_strategy": "one FMM propagation per unique source",
+        "fmm2d_pair_skip_same_label": bool(pair_skip_same_label),
+        "fmm2d_pair_skip_same_coord": bool(pair_skip_same_coord),
+        "fmm2d_pair_dedup_two_way": bool(pair_dedup_two_way),
+        "fmm2d_pair_same_coord_tolerance_m": float(pair_same_coord_tolerance_m),
+        "fmm2d_pair_min_distance_m": float(pair_min_distance_m),
+        "best_pair_key": str(best.get("pair_key", "")),
+        "best_pair_type": str(best.get("pair_type", "")),
+        "best_source_label": str(best.get("source_label", "")),
+        "best_target_label": str(best.get("target_label", "")),
+    }
+
+
 # ============================================================
 # Public algorithm entry point required by main.py
 # ============================================================
@@ -679,6 +1267,16 @@ def run(model: pd.DataFrame, graph: dict[str, Any], start_idx: int, end_idx: int
 
     if n <= 0:
         return {"success": False, "path_indices": [], "message": "empty model"}
+
+    pair_mode = str(_param(kwargs, "FMM2D_PAIR_MODE", "selected")).strip().lower()
+    if pair_mode in ("facility", "facility_pairs", "facility_library", "all_facility_pairs", "all_pairs"):
+        return _run_facility_pair_library(
+            model=model,
+            graph=graph,
+            start_idx=start_idx,
+            end_idx=end_idx,
+            **kwargs,
+        )
 
     # One FMM2D module supports both fastest and multiple modes.
     #

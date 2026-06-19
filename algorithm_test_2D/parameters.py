@@ -159,8 +159,8 @@ STOP_ON_ALGORITHM_FAILURE = False
 # Start / end nodes
 # ============================================================
 
-START_LABEL = "DB01"
-END_LABEL = "DK01"
+START_LABEL = None
+END_LABEL = None
 
 # Optional coordinate-based start/end.
 # Use None to use START_LABEL / END_LABEL.
@@ -189,7 +189,7 @@ MULTI_PATH_K_PATHS = 100
 MULTIPLE_OUTPUT_VALUE = MULTI_PATH_K_PATHS
 
 # In plot_only mode, limit combined plot to ranks <= this value.
-PLOT_MULTIPLE_MAX_RANK = MULTI_PATH_K_PATHS
+PLOT_MULTIPLE_MAX_RANK = None
 
 # "all" means use all ranks after applying PLOT_MULTIPLE_MAX_RANK.
 # Or use a list, for example:
@@ -358,7 +358,7 @@ SNAP_TARGET_PREFIXES = ("N", "FLZ", "DB", "DK")
 # snapping must ignore nodes with slowness >= 10.
 SNAP_ONLY_TO_FLYABLE = True
 
-INCLUDE_REAL_START_END_IN_OUTPUT = True
+INCLUDE_REAL_START_END_IN_OUTPUT = False
 
 
 # ============================================================
@@ -420,7 +420,7 @@ PLOT_PATH_LINE_WIDTH = 1.0
 
 PLOT_REPORT_TEXT_BOX = True
 
-PLOT_INITIATE_FIGURE = True
+PLOT_INITIATE_FIGURE = False
 INITIATE_FIGURE_NAME = f"00_initiate_from_{START_LABEL}_to_{END_LABEL}.png"
 
 
@@ -454,7 +454,7 @@ PLOT_SHOW_FLZ_OVERLAY = True
 # Plot a wide figure with:
 #   left  = input model as flyable/no-fly
 #   right = slowness/cost values with a discrete colorbar
-PLOT_INPUT_SLOWNESS_SIDE_BY_SIDE = True
+PLOT_INPUT_SLOWNESS_SIDE_BY_SIDE = False
 INPUT_SLOWNESS_SIDE_BY_SIDE_NAME = (
     f"00_input_vs_slowness_from_{START_LABEL}_to_{END_LABEL}.png"
 )
@@ -481,7 +481,7 @@ PLOT_SLOWNESS_CPT_MAX_BOUNDS = 120
 # Plot a zoomed corridor around the final selected path.
 # This is useful to check whether adjacent cells/nodes around the path
 # are flyable or blocked.
-PLOT_PATH_ZOOM_DIAGNOSTIC = True
+PLOT_PATH_ZOOM_DIAGNOSTIC = False
 
 # Corridor half-buffer around the path centerline.
 # Use 100-300 m for local node checking; increase if the path is sparse.
@@ -648,6 +648,35 @@ PATH_ZOOM_ARROW_EVERY = 1
 # Simpler direction check: adjacent nodes are useful, dense neighbor-edge lines are optional.
 PATH_ZOOM_SHOW_ADJACENT_NODES = True
 PATH_ZOOM_SHOW_NEIGHBOR_EDGES = False
+
+
+# ============================================================
+# FMM2D all-facility fastest-path plotting mode
+# ============================================================
+# START_LABEL=None and END_LABEL=None means FMM2D should compute/return
+# all requested facility pairs instead of one selected start/end pair.
+FMM2D_PAIR_MODE = "facility_library"
+FMM2D_PAIR_RETURN_MODE = "all"
+
+# Include only one direction for each unordered facility pair.
+# Example: keep DB01 -> DK01, skip DK01 -> DB01.
+FMM2D_PAIR_INCLUDE_DB_DK = True
+FMM2D_PAIR_INCLUDE_DB_DB = True
+FMM2D_PAIR_INCLUDE_DK_DK = True
+FMM2D_PAIR_INCLUDE_REVERSE = False
+FMM2D_PAIR_DEDUP_TWO_WAY = True
+
+# Remove invalid/self paths.
+FMM2D_PAIR_SKIP_SAME_LABEL = True
+FMM2D_PAIR_SKIP_SAME_COORD = True
+FMM2D_PAIR_SAME_COORD_TOLERANCE_M = 1.0
+FMM2D_PAIR_MIN_DISTANCE_M = 50.0
+
+# Save every path returned by FMM2D into combined report files.
+MULTI_PATH_SAVE_ALL_K_PATHS = True
+PLOT_MULTIPLE_RANKED_PATHS = True
+PLOT_MULTIPLE_RANKS = "all"
+PLOT_MULTIPLE_MAX_RANK = None
 
 
 # ============================================================

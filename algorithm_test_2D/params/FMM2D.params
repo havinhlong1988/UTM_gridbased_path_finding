@@ -1,41 +1,52 @@
 """
 params/FMM2D.params
 
-Configuration only for src/FMM2D.py.
-One algorithm file handles both fastest-path mode and multiple-path mode.
+Configuration for src/FMM2D.py.
+This file is configuration only. Algorithm code is src/FMM2D.py.
+
+This default is for all-fastest-facility-path plotting:
+    DB -> DK
+    DB -> DB
+    DK -> DK
 """
 
 # ============================================================
-# FMM2D mode control
+# Facility-pair FMM2D mode
 # ============================================================
-# "fastest"  = one fastest path only; overlap action is forced to "none".
-# "multiple" = repeated FMM alternative-path search using penalty/blocking.
-# "auto"     = infer from FMM2D_MAX_PATHS.
-FMM2D_MODE = "fastest"
+# "selected"          = solve only START_LABEL -> END_LABEL.
+# "facility_library" = compute all requested DB/DK facility pairs efficiently
+#                      by running one FMM propagation per unique source.
+FMM2D_PAIR_MODE = "facility_library"
 
-# In fastest mode this is forced to 1 internally.
-# In multiple mode:
-#   FMM2D_MAX_PATHS = 10    -> request 10 accepted alternative paths
-#   FMM2D_MAX_PATHS = None  -> auto search until no acceptable path or safety stop
+# "requested" = compute library internally, return only START_LABEL -> END_LABEL.
+# "all"       = return all reachable DB-DK / DB-DB / DK-DK paths to main.py.
+# "auto"      = requested if START_LABEL and END_LABEL exist, otherwise all.
+FMM2D_PAIR_RETURN_MODE = "all"
+
+FMM2D_PAIR_DB_PREFIXES = ("DB",)
+FMM2D_PAIR_DK_PREFIXES = ("DK",)
+FMM2D_PAIR_INCLUDE_DB_DK = True
+FMM2D_PAIR_INCLUDE_DB_DB = True
+FMM2D_PAIR_INCLUDE_DK_DK = True
+
+# Usually False because the cost field is symmetric; DB01->DB02 is the reverse of DB02->DB01.
+FMM2D_PAIR_INCLUDE_REVERSE = False
+
+# None = no artificial result limit. Use a number for very large cases.
+FMM2D_PAIR_MAX_RESULTS = None
+FMM2D_PAIR_MAX_EXPANDED_NODES = None
+
+# ============================================================
+# Selected-pair multiple-path mode
+# Used only when FMM2D_PAIR_MODE = "selected".
+# ============================================================
 FMM2D_MAX_PATHS = 1
-
-# Safety limits used when FMM2D_MAX_PATHS = None.
-# Keep modest for low-RAM machines.
 FMM2D_MAX_PATHS_SAFETY = 100
 FMM2D_MAX_TOTAL_ATTEMPTS = 300
 FMM2D_MAX_REPEATED_ATTEMPTS = 20
 FMM2D_MAX_ROUNDS_PER_PATH = 3
 
-# ============================================================
-# Overlap control for multiple mode
-# ============================================================
-# "penalty" = keep previous-path corridor open but increase cost
-# "block"   = hard block previous-path corridor, except protected endpoints
-# "none"    = no overlap control
-#
-# Important clause inside src/FMM2D.py:
-#   if FMM2D_MAX_PATHS == 1, this is automatically treated as "none".
-FMM2D_PREVIOUS_PATH_ACTION = "penalty"
+FMM2D_PREVIOUS_PATH_ACTION = "none"
 FMM2D_PATH_BUFFER_M = 150.0
 FMM2D_PREVIOUS_PATH_PENALTY_FACTOR = 5.0
 FMM2D_MAX_PENALTY_FACTOR = 1.0e6
@@ -43,20 +54,30 @@ FMM2D_ENDPOINT_PROTECTION_RADIUS_M = 250.0
 FMM2D_MAX_ALLOWED_NODE_OVERLAP_RATIO = 0.85
 
 # ============================================================
-# Slowness / endpoint handling
+# Numeric / RAM controls
 # ============================================================
 FMM2D_FLYABLE_ENDPOINT_SLOWNESS_FALLBACK = float(globals().get("FLYABLE_SLOWNESS", 0.085))
-
-# ============================================================
-# Low-RAM defaults
-# ============================================================
 FMM2D_LOW_MEMORY_MODE = bool(globals().get("LOW_MEMORY_MODE", True))
 FMM2D_USE_MULTICORE = False
 FMM2D_MAX_WORKERS = 1
-
-# Optional per-FMM-run expansion limit. None means no extra limit.
 FMM2D_MAX_EXPANDED_NODES = None
 FMM2D_INF_TIME = 1.0e30
 FMM2D_EPS = 1.0e-12
-
 FMM2D_VERBOSE = True
+
+# ============================================================
+# Facility-pair de-duplication / safety
+# ============================================================
+# Never create operationally meaningless paths such as DK04 -> DK04.
+# This also catches duplicate facility rows with the same label.
+FMM2D_PAIR_SKIP_SAME_LABEL = True
+FMM2D_PAIR_SKIP_SAME_COORD = True
+FMM2D_PAIR_SAME_COORD_TOLERANCE_M = 1.0
+
+# Optional direct-distance floor. 0.0 means disabled.
+# Set to 50.0 if you also want to remove very short same-place-looking pairs.
+FMM2D_PAIR_MIN_DISTANCE_M = 0.0
+
+# Remove duplicated two-way paths. Example: if DB01->DK01 exists,
+# do not also save/plot DK01->DB01.
+FMM2D_PAIR_DEDUP_TWO_WAY = True

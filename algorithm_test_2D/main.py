@@ -884,33 +884,245 @@ def normalize_algorithm_names(value):
     return clean
 
 
+def _param_is_none_like(value):
+    """Return True for None-like START/END settings."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in ("", "none", "null", "all", "auto")
+    return False
 
-def resolve_algorithm_module_name(name):
-    """Resolve algorithm module filename without forcing lowercase.
 
-    Example:
-        ALGORITHM = "FMM2D" -> src/FMM2D.py
+def _is_fmm2d_all_facility_request(algorithm_name):
+    """True when FMM2D should compute/return all DB/DK facility-pair paths."""
+    if str(algorithm_name).strip().lower() != "fmm2d":
+        return False
 
-    If the user types fmm2d but only src/FMM2D.py exists, this function
-    resolves the case safely on Linux.
+    pair_mode = str(get_param("FMM2D_PAIR_MODE", "selected")).strip().lower()
+    return_mode = str(get_param("FMM2D_PAIR_RETURN_MODE", "requested")).strip().lower()
+
+    facility_modes = (
+        "facility", "facility_pairs", "facility_library",
+        "all_facility_pairs", "all_pairs",
+    )
+    all_modes = ("all", "library", "all_pairs", "auto")
+
+    no_specific_start_end = (
+        _param_is_none_like(get_param("START_LABEL", None))
+        and _param_is_none_like(get_param("END_LABEL", None))
+        and _param_is_none_like(get_param("START_COORD", None))
+        and _param_is_none_like(get_param("END_COORD", None))
+    )
+
+    return pair_mode in facility_modes and return_mode in all_modes and no_specific_start_end
+
+
+def _first_index_with_label_prefix(model, prefixes):
+    """Return the first row index whose label or label_prefix starts with prefixes."""
+    prefixes = tuple(str(p).upper() for p in (prefixes or ()) if str(p))
+    if not prefixes:
+        raise ValueError("No prefixes supplied for facility dummy node selection.")
+
+    mask = np.zeros(len(model), dtype=bool)
+
+    if "label" in model.columns:
+        labels = model["label"].fillna("").astype(str).str.upper()
+        for prefix in prefixes:
+            mask |= labels.str.startswith(prefix).to_numpy(bool)
+
+    if "label_prefix" in model.columns:
+        label_prefix = model["label_prefix"].fillna("").astype(str).str.upper()
+        for prefix in prefixes:
+            mask |= label_prefix.str.startswith(prefix).to_numpy(bool)
+
+    indices = np.flatnonzero(mask)
+    if len(indices) == 0:
+        raise ValueError(f"Could not find any facility node with prefixes={prefixes}")
+    return int(indices[0])
+
+
+def _plot_all_facility_paths_report(
+    model,
+    ranked_paths,
+    figure_file: Path,
+    algorithm_name: str,
+    max_model_points: int,
+    dpi: int,
+    model_alpha: float,
+    model_marker_size: float,
+    path_line_width: float,
+    plot_model_as_flyable_nofly: bool,
+    plot_no_fly_slowness_threshold: float,
+):
+    """Plot all FMM2D facility-pair fastest paths with all source/target nodes.
+
+    This avoids the normal single-pair plot title/legend, which is misleading
+    when START_LABEL=None and END_LABEL=None.
     """
-    raw = str(name).strip()
-    if not raw:
-        return raw
+    import matplotlib.pyplot as plt
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
 
-    src_dir = Path(__file__).resolve().parent / "src"
-    exact_file = src_dir / f"{raw}.py"
-    if exact_file.exists():
-        return raw
+    figure_file = Path(figure_file)
+    figure_file.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        for candidate in src_dir.glob("*.py"):
-            if candidate.stem.lower() == raw.lower():
-                return candidate.stem
-    except Exception:
-        pass
+    if "lon" in model.columns and "lat" in model.columns:
+        xcol, ycol = "lon", "lat"
+    elif "x" in model.columns and "y" in model.columns:
+        xcol, ycol = "x", "y"
+    else:
+        raise ValueError("Cannot plot all facility paths: model must contain lon/lat or x/y columns.")
 
-    return raw
+    x = pd.to_numeric(model[xcol], errors="coerce").to_numpy(dtype=float, copy=True)
+    y = pd.to_numeric(model[ycol], errors="coerce").to_numpy(dtype=float, copy=True)
+    n_model = len(model)
+
+    finite = np.isfinite(x) & np.isfinite(y)
+    if n_model > int(max_model_points) > 0:
+        keep_idx = np.flatnonzero(finite)
+        step = max(1, int(np.ceil(len(keep_idx) / float(max_model_points))))
+        plot_idx = keep_idx[::step]
+    else:
+        plot_idx = np.flatnonzero(finite)
+
+    fig, ax = plt.subplots(figsize=(14, 10), dpi=int(dpi))
+
+    if plot_model_as_flyable_nofly and "slowness" in model.columns:
+        slow = pd.to_numeric(model["slowness"], errors="coerce").to_numpy(dtype=float, copy=True)
+        fly = np.isfinite(slow) & (slow < float(plot_no_fly_slowness_threshold))
+        nofly = np.isfinite(slow) & (slow >= float(plot_no_fly_slowness_threshold))
+        pidx = plot_idx
+        ax.scatter(
+            x[pidx[fly[pidx]]], y[pidx[fly[pidx]]],
+            s=float(model_marker_size), marker="o", alpha=float(model_alpha),
+            color="#79c79a", edgecolors="none", label=f"Flyable: s < {plot_no_fly_slowness_threshold:g}", zorder=1,
+        )
+        ax.scatter(
+            x[pidx[nofly[pidx]]], y[pidx[nofly[pidx]]],
+            s=float(model_marker_size), marker="s", alpha=float(model_alpha),
+            color="red", edgecolors="none", label=f"No-fly: s >= {plot_no_fly_slowness_threshold:g}", zorder=1,
+        )
+    else:
+        ax.scatter(x[plot_idx], y[plot_idx], s=float(model_marker_size), alpha=float(model_alpha), color="0.7", edgecolors="none", label="Model nodes", zorder=1)
+
+    valid_paths = []
+    for item in ranked_paths or []:
+        path = item.get("path_indices", [])
+        if path and len(path) >= 2:
+            valid_paths.append(item)
+
+    if not valid_paths:
+        raise ValueError("No valid ranked_paths available for all-facility plot.")
+
+    max_rank = max(int(item.get("rank", i + 1)) for i, item in enumerate(valid_paths))
+    norm = Normalize(vmin=1, vmax=max(1, max_rank))
+    cmap = plt.get_cmap("turbo") if max_rank > 1 else plt.get_cmap("viridis")
+
+    source_indices = set()
+    target_indices = set()
+    labels_by_idx = {}
+
+    for i, item in enumerate(valid_paths):
+        rank = int(item.get("rank", i + 1))
+        path = [int(v) for v in item.get("path_indices", []) if 0 <= int(v) < n_model]
+        if len(path) < 2:
+            continue
+
+        color = cmap(norm(rank))
+        alpha = 0.78 if len(valid_paths) <= 80 else 0.45
+        ax.plot(
+            x[path], y[path],
+            color=color,
+            linewidth=max(0.8, float(path_line_width) * (0.65 if len(valid_paths) > 80 else 1.0)),
+            alpha=alpha,
+            zorder=4,
+        )
+
+        src = int(item.get("source_idx", path[0]))
+        dst = int(item.get("target_idx", path[-1]))
+        if src != dst:
+            source_indices.add(src)
+            target_indices.add(dst)
+            labels_by_idx[src] = str(item.get("source_label", model.loc[src, "label"] if "label" in model.columns else src))
+            labels_by_idx[dst] = str(item.get("target_label", model.loc[dst, "label"] if "label" in model.columns else dst))
+
+    both_indices = source_indices & target_indices
+    source_only = sorted(source_indices - both_indices, key=lambda ii: labels_by_idx.get(ii, str(ii)))
+    target_only = sorted(target_indices - both_indices, key=lambda ii: labels_by_idx.get(ii, str(ii)))
+    both_sorted = sorted(both_indices, key=lambda ii: labels_by_idx.get(ii, str(ii)))
+
+    def _scatter_indices(indices, marker, label, face, edge, size, z):
+        if not indices:
+            return
+        idx = np.asarray(indices, dtype=int)
+        ax.scatter(
+            x[idx], y[idx],
+            s=size, marker=marker,
+            facecolors=face, edgecolors=edge,
+            linewidths=1.7,
+            label=label,
+            zorder=z,
+        )
+
+    _scatter_indices(source_only, "*", "Start facilities", "yellow", "black", 180, 8)
+    _scatter_indices(target_only, "s", "End facilities", "none", "blue", 120, 8)
+    if both_sorted:
+        _scatter_indices(both_sorted, "D", "Start + end facilities", "white", "black", 105, 9)
+        _scatter_indices(both_sorted, "*", None, "yellow", "black", 155, 10)
+
+    # Label all source/end facilities once.
+    for pos, idx in enumerate(sorted(source_indices | target_indices, key=lambda ii: labels_by_idx.get(ii, str(ii)))):
+        if idx < 0 or idx >= n_model or not np.isfinite(x[idx]) or not np.isfinite(y[idx]):
+            continue
+        dx = 5 if pos % 2 == 0 else -5
+        dy = 5 if (pos // 2) % 2 == 0 else -7
+        ax.annotate(
+            labels_by_idx.get(idx, str(idx)),
+            (x[idx], y[idx]),
+            xytext=(dx, dy),
+            textcoords="offset points",
+            fontsize=9,
+            fontweight="bold",
+            color="black",
+            bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.65),
+            zorder=12,
+        )
+
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.83, pad=0.02)
+    cbar.set_label("Rank index")
+
+    unique_sources = len(source_indices)
+    unique_targets = len(target_indices)
+    pair_count = len(valid_paths)
+    ax.set_title(f"Scenario 1 all fastest facility paths - {algorithm_name}", fontsize=18, fontweight="bold")
+    ax.set_xlabel(xcol)
+    ax.set_ylabel(ycol)
+    ax.grid(False)
+    ax.legend(loc="upper left", frameon=True, fancybox=False, edgecolor="black", fontsize=9)
+
+    text = (
+        f"Paths plotted: {pair_count}\n"
+        f"Unique starts: {unique_sources}\n"
+        f"Unique ends: {unique_targets}\n"
+        f"Self/same-label pairs: skipped"
+    )
+    ax.text(
+        0.99, 0.99, text,
+        transform=ax.transAxes,
+        ha="right", va="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="black", alpha=0.82),
+        zorder=20,
+    )
+
+    fig.tight_layout()
+    fig.savefig(figure_file, dpi=int(dpi), bbox_inches="tight")
+    plt.close(fig)
+    return str(figure_file)
+
+
 
 def run_one_algorithm(algorithm_name):
     run_total_start_time = time.perf_counter()
@@ -921,11 +1133,6 @@ def run_one_algorithm(algorithm_name):
     algorithm_name = str(algorithm_name).strip()
     if not algorithm_name:
         raise ValueError("Empty algorithm name in ALGORITHM list.")
-
-    resolved_algorithm_name = resolve_algorithm_module_name(algorithm_name)
-    if resolved_algorithm_name != algorithm_name:
-        print(f"[INFO] Algorithm name case resolved: {algorithm_name} -> {resolved_algorithm_name}")
-        algorithm_name = resolved_algorithm_name
 
     # ============================================================
     # Basic paths and algorithm
@@ -999,10 +1206,20 @@ def run_one_algorithm(algorithm_name):
     start_coord = get_param("START_COORD", None)
     end_coord = get_param("END_COORD", None)
 
+    # FMM2D can compute and plot all fastest DB/DK facility-pair paths.
+    # In that mode START_LABEL/END_LABEL/START_COORD/END_COORD may all be None.
+    # main.py will choose a temporary DB/DK dummy only for legacy plotting/graph
+    # bookkeeping, while FMM2D returns the real all-pair path library.
+    fmm2d_all_facility_mode = _is_fmm2d_all_facility_request(algorithm_name)
+
     # Figure files:
     # output/figures/senario1/{algorithm}/
-    safe_start_label = str(start_label).replace("/", "_").replace("\\", "_").replace(" ", "_")
-    safe_end_label = str(end_label).replace("/", "_").replace("\\", "_").replace(" ", "_")
+    if fmm2d_all_facility_mode:
+        safe_start_label = "ALL"
+        safe_end_label = "FACILITY_PAIRS"
+    else:
+        safe_start_label = str(start_label).replace("/", "_").replace("\\", "_").replace(" ", "_")
+        safe_end_label = str(end_label).replace("/", "_").replace("\\", "_").replace(" ", "_")
 
     report_figure_file = (
         algorithm_figure_dir
@@ -1013,6 +1230,10 @@ def run_one_algorithm(algorithm_name):
     snap_target_prefixes = tuple(get_param("SNAP_TARGET_PREFIXES", ("N", "FLZ", "DB", "DK")))
     snap_only_to_flyable = bool(get_param("SNAP_ONLY_TO_FLYABLE", True))
     include_real_start_end = bool(get_param("INCLUDE_REAL_START_END_IN_OUTPUT", True))
+    if fmm2d_all_facility_mode:
+        # All facility-pair paths already contain their own source/target nodes.
+        # Do not add the temporary dummy DB/DK to every exported path.
+        include_real_start_end = False
 
     # Operational facilities can be forced flyable even if they sit on a
     # no-fly/slowness background cell.  For the current rule this should be
@@ -1367,13 +1588,31 @@ def run_one_algorithm(algorithm_name):
     # 2. Select real start/end
     # ============================================================
     print("[2/6] Selecting start/end nodes...")
-    start_idx, end_idx = find_start_end_indices(
-        model,
-        start_label=start_label,
-        end_label=end_label,
-        start_coord=start_coord,
-        end_coord=end_coord,
-    )
+
+    if fmm2d_all_facility_mode:
+        db_prefixes = tuple(get_param("FMM2D_PAIR_DB_PREFIXES", ("DB",)))
+        dk_prefixes = tuple(get_param("FMM2D_PAIR_DK_PREFIXES", ("DK",)))
+
+        # Temporary dummy nodes only. FMM2D will compute all real DB/DK pairs.
+        start_idx = _first_index_with_label_prefix(model, db_prefixes)
+        try:
+            end_idx = _first_index_with_label_prefix(model, dk_prefixes)
+        except Exception:
+            # If the file has no DK, still keep main.py alive for DB-DB mode.
+            end_idx = start_idx
+
+        print("      FMM2D all-facility-pair mode detected.")
+        print("      START_LABEL/END_LABEL are None; using temporary dummy nodes only for main.py bookkeeping.")
+        print(f"      Dummy start index: {start_idx} | {model.loc[start_idx, 'label']}")
+        print(f"      Dummy end index  : {end_idx} | {model.loc[end_idx, 'label']}")
+    else:
+        start_idx, end_idx = find_start_end_indices(
+            model,
+            start_label=start_label,
+            end_label=end_label,
+            start_coord=start_coord,
+            end_coord=end_coord,
+        )
 
     print(f"      Start index: {start_idx}")
     print(f"      End index  : {end_idx}")
@@ -1622,7 +1861,7 @@ def run_one_algorithm(algorithm_name):
             algorithm_figure_dir=algorithm_figure_dir,
             path_name=path_name,
             algorithm_name=algorithm_name,
-            is_multiple_algorithm=is_multiple_algorithm,
+            is_multiple_algorithm=(is_multiple_algorithm or fmm2d_all_facility_mode),
             safe_start_label=safe_start_label,
             safe_end_label=safe_end_label,
             max_model_points=plot_max_model_points,
@@ -1939,7 +2178,7 @@ def run_one_algorithm(algorithm_name):
                 path_indices=ranked_algorithm_path_indices,
                 real_start_idx=start_idx,
                 real_end_idx=end_idx,
-                include=include_real_start_end,
+                include=(False if fmm2d_all_facility_mode else include_real_start_end),
             )
 
             ranked_algorithm_metrics = compute_path_metrics(
@@ -1962,6 +2201,12 @@ def run_one_algorithm(algorithm_name):
             ranked_result["turn_cost"] = float(path_item.get("turn_cost", 0.0))
             ranked_result["turn_count"] = int(path_item.get("turn_count", 0))
             ranked_result["total_turn_angle_degree"] = float(path_item.get("total_turn_angle_degree", 0.0))
+            for meta_key in (
+                "source_idx", "target_idx", "source_label", "target_label",
+                "pair_type", "pair_key", "pair_undirected_key", "direct_distance_m",
+            ):
+                if meta_key in path_item:
+                    ranked_result[meta_key] = path_item.get(meta_key)
 
             ranked_result["algorithm_path_distance_m"] = ranked_algorithm_metrics["distance_traveled_m"]
             ranked_result["algorithm_path_distance_km"] = ranked_algorithm_metrics["distance_traveled_km"]
@@ -2005,7 +2250,7 @@ def run_one_algorithm(algorithm_name):
                         path_indices=summary_path_indices,
                         real_start_idx=start_idx,
                         real_end_idx=end_idx,
-                        include=include_real_start_end,
+                        include=(False if fmm2d_all_facility_mode else include_real_start_end),
                     )
                     summary_step_df = build_path_step_distance_table(
                         model=model,
@@ -2020,6 +2265,14 @@ def run_one_algorithm(algorithm_name):
 
                 summary_rows.append({
                     "rank": int(path_item.get("rank", 0)),
+                    "source_label": path_item.get("source_label", ""),
+                    "target_label": path_item.get("target_label", ""),
+                    "pair_key": path_item.get("pair_key", ""),
+                    "pair_undirected_key": path_item.get("pair_undirected_key", ""),
+                    "pair_type": path_item.get("pair_type", ""),
+                    "source_idx": path_item.get("source_idx", ""),
+                    "target_idx": path_item.get("target_idx", ""),
+                    "direct_distance_m": path_item.get("direct_distance_m", ""),
                     "total_cost": float(path_item.get("total_cost", path_item.get("cost", 0.0))),
                     "travel_cost": float(path_item.get("travel_cost", 0.0)),
                     "turn_cost": float(path_item.get("turn_cost", 0.0)),
@@ -2030,10 +2283,67 @@ def run_one_algorithm(algorithm_name):
                     "total_turn_angle_degree": float(path_item.get("total_turn_angle_degree", 0.0)),
                 })
 
-            pd.DataFrame(summary_rows).to_csv(k_summary_file, index=False)
+            summary_df = pd.DataFrame(summary_rows)
+            summary_df.to_csv(k_summary_file, index=False)
             exported["top_k_summary"] = str(k_summary_file)
             exported["top_k_count"] = len(exported_k_paths)
             print(f"      Top-K summary: {k_summary_file}")
+
+            # A clearer all-path report name for facility-library mode and
+            # multiple-path runs. This contains one row per returned path.
+            all_paths_report_file = output_dir / f"{path_name}_{algorithm_name}_all_paths_report.csv"
+            summary_df.to_csv(all_paths_report_file, index=False)
+            exported["all_paths_report_csv"] = str(all_paths_report_file)
+            print(f"      All-path report CSV: {all_paths_report_file}")
+
+            # One combined file with every node step for every returned path.
+            # This is useful for checking/plotting all fastest facility paths
+            # without opening hundreds of rank_XXX files.
+            all_step_frames = []
+            for path_item in all_path_results:
+                step_path_indices = path_item.get("path_indices", [])
+                if not step_path_indices:
+                    continue
+
+                step_output_indices = add_real_start_end_to_path(
+                    path_indices=step_path_indices,
+                    real_start_idx=start_idx,
+                    real_end_idx=end_idx,
+                    include=(False if fmm2d_all_facility_mode else include_real_start_end),
+                )
+                step_df = build_path_step_distance_table(
+                    model=model,
+                    path_indices=step_output_indices,
+                    path_rank=int(path_item.get("rank", 0)),
+                )
+
+                # Insert path-level metadata at the front of every step row.
+                meta_cols = {
+                    "source_label": path_item.get("source_label", ""),
+                    "target_label": path_item.get("target_label", ""),
+                    "pair_key": path_item.get("pair_key", ""),
+                    "pair_undirected_key": path_item.get("pair_undirected_key", ""),
+                    "pair_type": path_item.get("pair_type", ""),
+                    "source_idx": path_item.get("source_idx", ""),
+                    "target_idx": path_item.get("target_idx", ""),
+                    "total_cost": float(path_item.get("total_cost", path_item.get("cost", 0.0))),
+                    "travel_cost": float(path_item.get("travel_cost", 0.0)),
+                    "path_distance_m": float(path_item.get("distance_m", 0.0)),
+                    "path_distance_km": float(path_item.get("distance_km", 0.0)),
+                }
+                for col, val in reversed(list(meta_cols.items())):
+                    step_df.insert(0, col, val)
+                all_step_frames.append(step_df)
+
+            if all_step_frames:
+                all_paths_steps_file = output_dir / f"{path_name}_{algorithm_name}_all_paths_steps.csv"
+                pd.concat(all_step_frames, ignore_index=True).to_csv(
+                    all_paths_steps_file,
+                    index=False,
+                    float_format="%.8f",
+                )
+                exported["all_paths_steps_csv"] = str(all_paths_steps_file)
+                print(f"      All-path steps CSV : {all_paths_steps_file}")
         except Exception as exc:
             print(f"[WARNING] Could not write Top-K summary CSV: {exc}")
 
@@ -2042,26 +2352,31 @@ def run_one_algorithm(algorithm_name):
     # ============================================================
     print("[6/6] Plotting path report...")
 
-    # Always write the best-path report.  For astar_multiple this keeps the
-    # normal report filename while the combined ranked-path figure is written
-    # as an extra diagnostic below.
-    plot_path_report(
-        model=model,
-        path_indices=path_indices,
-        figure_file=report_figure_file,
-        algorithm_name=algorithm_name,
-        max_model_points=plot_max_model_points,
-        dpi=plot_dpi,
-        model_alpha=plot_model_alpha,
-        model_marker_size=plot_model_marker_size,
-        path_line_width=plot_path_line_width,
-        plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
-        plot_no_fly_prefixes=plot_no_fly_prefixes,
-        plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
-        plot_show_flz_overlay=plot_show_flz_overlay,
-        always_flyable_prefixes=plot_always_flyable_prefixes,
-        result=result if plot_report_text_box else None,
-    )
+    # For FMM2D all-facility mode, the normal single-pair path report is
+    # misleading because START_LABEL/END_LABEL are intentionally None and
+    # main.py used only temporary dummy nodes.  Plot only the all-facility
+    # combined report below.
+    if not fmm2d_all_facility_mode:
+        # Always write the best-path report.  For astar_multiple this keeps the
+        # normal report filename while the combined ranked-path figure is written
+        # as an extra diagnostic below.
+        plot_path_report(
+            model=model,
+            path_indices=path_indices,
+            figure_file=report_figure_file,
+            algorithm_name=algorithm_name,
+            max_model_points=plot_max_model_points,
+            dpi=plot_dpi,
+            model_alpha=plot_model_alpha,
+            model_marker_size=plot_model_marker_size,
+            path_line_width=plot_path_line_width,
+            plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+            plot_no_fly_prefixes=plot_no_fly_prefixes,
+            plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+            plot_show_flz_overlay=plot_show_flz_overlay,
+            always_flyable_prefixes=plot_always_flyable_prefixes,
+            result=result if plot_report_text_box else None,
+        )
 
     # astar_multiple returns paths in result["path_results"].  Older code
     # looked only for result["ranked_paths"], so the combined multiple-path
@@ -2069,8 +2384,7 @@ def run_one_algorithm(algorithm_name):
     ranked_paths = result.get("ranked_paths", None) or result.get("path_results", None)
 
     if (
-        is_multiple_algorithm
-        and plot_multiple_ranked_paths
+        plot_multiple_ranked_paths
         and ranked_paths
         and len(ranked_paths) > 1
     ):
@@ -2089,7 +2403,7 @@ def run_one_algorithm(algorithm_name):
                 path_indices=item.get("path_indices", []),
                 real_start_idx=start_idx,
                 real_end_idx=end_idx,
-                include=include_real_start_end,
+                include=(False if fmm2d_all_facility_mode else include_real_start_end),
             )
             selected_ranked_paths.append(item_for_plot)
 
@@ -2099,23 +2413,38 @@ def run_one_algorithm(algorithm_name):
                 / f"path_report_{algorithm_name}_all_ranks_from_{safe_start_label}_to_{safe_end_label}.png"
             )
 
-            plot_multiple_paths_report(
-                model=model,
-                ranked_paths=selected_ranked_paths,
-                figure_file=multiple_figure_file,
-                algorithm_name=algorithm_name,
-                max_model_points=plot_max_model_points,
-                dpi=plot_dpi,
-                model_alpha=plot_model_alpha,
-                model_marker_size=plot_model_marker_size,
-                path_line_width=plot_path_line_width,
-                plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
-                plot_no_fly_prefixes=plot_no_fly_prefixes,
-                plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
-                plot_show_flz_overlay=plot_show_flz_overlay,
-                always_flyable_prefixes=plot_always_flyable_prefixes,
-                result=result if plot_report_text_box else None,
-            )
+            if fmm2d_all_facility_mode:
+                _plot_all_facility_paths_report(
+                    model=model,
+                    ranked_paths=selected_ranked_paths,
+                    figure_file=multiple_figure_file,
+                    algorithm_name=algorithm_name,
+                    max_model_points=plot_max_model_points,
+                    dpi=plot_dpi,
+                    model_alpha=plot_model_alpha,
+                    model_marker_size=plot_model_marker_size,
+                    path_line_width=plot_path_line_width,
+                    plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+                    plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+                )
+            else:
+                plot_multiple_paths_report(
+                    model=model,
+                    ranked_paths=selected_ranked_paths,
+                    figure_file=multiple_figure_file,
+                    algorithm_name=algorithm_name,
+                    max_model_points=plot_max_model_points,
+                    dpi=plot_dpi,
+                    model_alpha=plot_model_alpha,
+                    model_marker_size=plot_model_marker_size,
+                    path_line_width=plot_path_line_width,
+                    plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+                    plot_no_fly_prefixes=plot_no_fly_prefixes,
+                    plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+                    plot_show_flz_overlay=plot_show_flz_overlay,
+                    always_flyable_prefixes=plot_always_flyable_prefixes,
+                    result=result if plot_report_text_box else None,
+                )
 
             exported["multiple_path_figure"] = str(multiple_figure_file)
             print(f"      Multiple-path plot: {multiple_figure_file}")
