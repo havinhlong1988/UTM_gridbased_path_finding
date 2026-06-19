@@ -1,0 +1,47 @@
+# ============================================================
+# params/fmmastar.params
+# Algorithm-specific settings for src/fmmastar.py
+# ============================================================
+
+# Follow the same no-fly rule as parameters.py:
+#   slowness < 10.0   -> flyable
+#   slowness >= 10.0  -> no-fly
+FMM_NO_FLY_THRESHOLD = NO_FLY_SLOWNESS_THRESHOLD
+FMM_THRESHOLD_MODE = NO_FLY_THRESHOLD_MODE
+
+# Use graph["valid_indices"] created by main.py, so DB/DK/FLZ forcing,
+# snapping, and slowness blocking are shared with other algorithms.
+FMM_USE_GRAPH_VALID_INDICES = True
+FMM_FORCE_START_END_FLYABLE = FORCE_SEARCH_START_END_FLYABLE
+
+# Important fix:
+# Do NOT require compact regular x/y grid. Use graph adjacency if available;
+# otherwise use lightweight KDTree neighbors over valid nodes.
+FMM_NEIGHBOR_SOURCE = "graph_or_kdtree"   # "graph_or_kdtree", "graph", "kdtree"
+FMM_CONNECTIVITY = CONNECTIVITY_2D
+FMM_USE_Z_DISTANCE = False
+FMM_KDTREE_RADIUS_FACTOR = KDTREE_RADIUS_FACTOR
+FMM_KDTREE_MAX_NEIGHBORS_2D = KDTREE_MAX_NEIGHBORS_2D
+FMM_KDTREE_MAX_NEIGHBORS_3D = KDTREE_MAX_NEIGHBORS_3D
+
+# A* control
+FMM_HEURISTIC_WEIGHT = MULTI_PATH_HEURISTIC_WEIGHT
+FMM_MAX_EXPANSIONS = MULTI_PATH_MAX_EXPANSIONS
+
+# FMM-like clearance penalty.
+# The algorithm estimates distance to nearest no-fly/blocked node and penalizes
+# cells inside this safe clearance distance.
+FMM_CLEARANCE_METHOD = "nearest_blocked_kdtree"
+FMM_SAFE_CLEARANCE_M = 300.0
+FMM_CLEARANCE_WEIGHT = 2.0
+FMM_CLEARANCE_POWER = 2.0
+
+# 0.0 = soft penalty only.  Set e.g. 50 or 100 to forbid entering nodes too
+# close to blocked/no-fly cells, except start/end.
+FMM_MIN_CLEARANCE_TO_ENTER_M = 0.0
+
+# Keep raw node-by-node output for main.py plotting/export.
+FMM_SMOOTH_PATH = False
+FMM_SMOOTH_REQUIRE_CLEARANCE_M = 0.0
+
+FMM_VERBOSE = MULTI_PATH_VERBOSE

@@ -176,7 +176,7 @@ PATH_STATUS_BOX_LOCATION = "upper right"
 # Multiple-path algorithm naming rule:
 #     src/astar_multiple.py -> output folder:
 #     astar/multiple/{MULTIPLE_OUTPUT_VALUE}/
-ALGORITHM = ["thetastar"]
+ALGORITHM = ["fmmastar"]
 # ALGORITHM = ["astar", "astar_multiple"]
 
 # If False, continue to the next algorithm if one fails.
