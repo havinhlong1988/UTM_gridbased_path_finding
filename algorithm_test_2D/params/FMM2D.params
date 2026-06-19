@@ -29,7 +29,8 @@ FMM2D_PAIR_INCLUDE_DB_DK = True
 FMM2D_PAIR_INCLUDE_DB_DB = True
 FMM2D_PAIR_INCLUDE_DK_DK = True
 
-# Usually False because the cost field is symmetric; DB01->DB02 is the reverse of DB02->DB01.
+# Keep False in path_offset mode. The algorithm generates reverse-direction
+# main/backup paths explicitly for every base route.
 FMM2D_PAIR_INCLUDE_REVERSE = False
 
 # None = no artificial result limit. Use a number for very large cases.
@@ -76,8 +77,63 @@ FMM2D_PAIR_SAME_COORD_TOLERANCE_M = 1.0
 
 # Optional direct-distance floor. 0.0 means disabled.
 # Set to 50.0 if you also want to remove very short same-place-looking pairs.
-FMM2D_PAIR_MIN_DISTANCE_M = 0.0
+FMM2D_PAIR_MIN_DISTANCE_M = 50.0
 
 # Remove duplicated two-way paths. Example: if DB01->DK01 exists,
 # do not also save/plot DK01->DB01.
 FMM2D_PAIR_DEDUP_TWO_WAY = True
+
+# ============================================================
+# FMM2D spatial collision avoidance / path-offset routing
+# ============================================================
+# Time-offset collision avoidance has been removed.
+# New behavior:
+#   For every base route A--B, generate:
+#     A -> B main
+#     A -> B backup
+#     B -> A main
+#     B -> A backup
+# Paths are spatially separated by a path-offset buffer. Overlap is allowed
+# only inside the service-zone buffer around DB/DK/FLZ and route endpoints.
+# If strict separation cannot produce all 4 paths, the fallback creates the
+# smallest route-level traffic link and marks the affected path(s).
+FMM2D_COLLISION_AVOIDANCE_MODE = "path_offset"
+
+# Number of requested paths per direction.
+FMM2D_PATH_OFFSET_FORWARD_PATHS = 2
+FMM2D_PATH_OFFSET_BACKWARD_PATHS = 2
+
+# Hard spatial separation distance between route alternatives.
+FMM2D_PATH_OFFSET_BUFFER_M = 200.0
+
+# Main/backup lane-pair preference.
+# The backup lane is still not allowed to overlap the main lane outside the
+# path-offset buffer, but it receives a soft penalty when it goes too far away
+# from the same-direction main lane. This makes the backup usable for lane
+# switching during collision avoidance. Forward and backward directions each
+# get their own independent main/backup pair; they do not need to stay close.
+FMM2D_LANE_PAIR_CLOSE_PARALLEL_PRIORITY = True
+FMM2D_LANE_PAIR_PREFERRED_MAX_DISTANCE_M = 450.0
+FMM2D_LANE_PAIR_DISTANCE_WEIGHT = 1.5
+FMM2D_LANE_PAIR_MAX_PENALTY_FACTOR = 25.0
+
+# Optional hard maximum distance from backup lane to the same-direction main lane.
+# None keeps it as a soft priority only, which is safer when no-fly cells are tight.
+FMM2D_LANE_PAIR_HARD_MAX_DISTANCE_M = None
+FMM2D_LANE_PAIR_HARD_LIMIT_FOR_TRAFFIC_LINK = False
+
+# Overlap exception zone around DB/DK/FLZ and route endpoints.
+FMM2D_PATH_OFFSET_ALLOWED_BUFFER_M = 200.0
+FMM2D_PATH_OFFSET_ALLOWED_PREFIXES = ("DB", "DK", "FLZ")
+
+# Try strict non-overlap first. If it fails, allow a penalized shared corridor
+# and tag that corridor as a traffic link.
+FMM2D_PATH_OFFSET_STRICT_BEFORE_TRAFFIC_LINK = True
+FMM2D_TRAFFIC_LINK_BUFFER_M = 200.0
+FMM2D_TRAFFIC_LINK_PENALTY_FACTOR = 50.0
+FMM2D_TRAFFIC_LINK_MINIMIZE = True
+
+# The old schedule/time-offset figure is disabled because path_offset is a
+# spatial routing solution, not a departure-delay solution.
+FMM2D_PLOT_COLLISION_TIME_REPORT = False
+FMM2D_COLLISION_TIME_REPORT_MAX_PATHS = None

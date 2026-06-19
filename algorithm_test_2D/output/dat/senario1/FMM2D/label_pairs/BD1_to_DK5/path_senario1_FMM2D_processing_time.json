@@ -1,0 +1,12 @@
+{
+  "algorithm": "FMM2D",
+  "run_mode": "full",
+  "success": true,
+  "k_paths_requested": 1,
+  "k_paths_found": 1,
+  "expanded_states": 6128,
+  "algorithm_search_time_s": 0.11812226899928646,
+  "algorithm_search_time_text": "0.12 s",
+  "processing_time_total_s": 1.6856066920008743,
+  "processing_time_total_text": "1.69 s"
+}

@@ -1,0 +1,12 @@
+{
+  "algorithm": "astar",
+  "run_mode": "full",
+  "success": true,
+  "k_paths_requested": 1,
+  "k_paths_found": 1,
+  "expanded_states": 0,
+  "algorithm_search_time_s": 0.41660231100104284,
+  "algorithm_search_time_text": "0.42 s",
+  "processing_time_total_s": 1.8968815660009568,
+  "processing_time_total_text": "1.90 s"
+}

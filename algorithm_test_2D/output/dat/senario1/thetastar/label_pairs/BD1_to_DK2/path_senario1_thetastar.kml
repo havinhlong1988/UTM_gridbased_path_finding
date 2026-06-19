@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>path_senario1_thetastar</name>
+
+    <Style id="path_style">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>4</width>
+      </LineStyle>
+    </Style>
+
+    <Placemark>
+      <name>path_senario1_thetastar</name>
+      <styleUrl>#path_style</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <altitudeMode>absolute</altitudeMode>
+        <coordinates>
+105.5421057000,20.9997913600,0.000
+105.5424223400,21.0008900300,0.000
+105.5433894000,21.0022422500,0.000
+105.5434532100,21.0198609400,0.000
+105.5431030500,21.0209229400,0.000
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>

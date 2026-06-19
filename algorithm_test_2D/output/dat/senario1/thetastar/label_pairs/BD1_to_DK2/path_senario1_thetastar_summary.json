@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_thetastar",
+  "algorithm": "thetastar",
+  "success": true,
+  "message": "Path found by A* and post-smoothed by Theta* line-of-sight. nodes: 47 -> 5",
+  "path_nodes": 5,
+  "total_cost": 119.45193626347137,
+  "expanded_nodes": 2927,
+  "visited_nodes": 2927,
+  "runtime_seconds": 1.109992504119873,
+  "start": {
+    "x": 105.5421057,
+    "y": 20.99979136,
+    "z": 0.0,
+    "label": "DB01"
+  },
+  "end": {
+    "x": 105.54310305,
+    "y": 21.02092294,
+    "z": 0.0,
+    "label": "DK02"
+  },
+  "algorithm_path_distance_m": 2392.6676645437124,
+  "algorithm_path_distance_km": 2.3926676645437124,
+  "algorithm_estimated_traveltime_s": 74.33274320221476,
+  "algorithm_estimated_traveltime_min": 1.238879053370246,
+  "output_path_distance_m": 2392.6676645437124,
+  "output_path_distance_km": 2.3926676645437124,
+  "output_estimated_traveltime_s": 74.33274320221476,
+  "output_estimated_traveltime_min": 1.238879053370246
+}

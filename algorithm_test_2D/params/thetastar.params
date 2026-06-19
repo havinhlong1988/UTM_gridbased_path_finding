@@ -1,0 +1,47 @@
+# ============================================================
+# Theta* path-finding parameters - LAE-UTM point-clearance LOS
+# ============================================================
+
+THETASTAR_HEURISTIC_WEIGHT = 1.0
+THETASTAR_MAX_EXPANSIONS = 5_000_000
+THETASTAR_ALLOW_ANY_ANGLE = True
+
+# Recommended current mode:
+# A* first gives a guaranteed valid graph path.
+# Then Theta* removes waypoints only where LOS is safe.
+THETASTAR_ASTAR_FIRST_LOS_SMOOTH = True
+THETASTAR_PURE_ASTAR_DELEGATE = False
+
+# ------------------------------------------------------------
+# Line of sight method
+# ------------------------------------------------------------
+# "bresenham"       : strict integer grid cells; good only for perfect row/column grids.
+# "point_clearance" : recommended for this lon/lat + KDTree LAE-UTM model.
+# "hybrid"          : try Bresenham first; if grid cell is missing, use point_clearance.
+THETASTAR_LINE_OF_SIGHT_METHOD = "point_clearance"
+
+# Reject a shortcut when it passes too close to a blocked/no-fly node center.
+# For a 50 m grid, 35 m is about half the cell diagonal.
+# Increase to 40-50 m if the line is too close to red cells.
+# Decrease to 25-30 m if Theta* is still too similar to A*.
+THETASTAR_POINT_CLEARANCE_M = 35.0
+
+# Used only by THETASTAR_LINE_OF_SIGHT_METHOD = "bresenham" or "hybrid".
+THETASTAR_BRESENHAM_CLEARANCE_CELLS = 0
+
+# Important: keep False. This fallback previously caused too-aggressive cuts.
+THETASTAR_LOS_STRAIGHT_PATH_FALLBACK = False
+THETASTAR_LOS_STRAIGHT_PATH_TOLERANCE_M = 75.0
+
+# Try all possible future waypoints during smoothing.
+THETASTAR_LOS_SMOOTH_MAX_LOOKAHEAD_NODES = 999999
+
+# False shows the real Theta* waypoint path.
+# True expands shortcuts back to sampled/intermediate nodes for debug and will look like A*.
+THETASTAR_OUTPUT_SAMPLED_PATH = False
+
+# Keep meter distance when x/y look like lon/lat degrees.
+THETASTAR_LONLAT_AS_METERS = True
+THETASTAR_LINE_OF_SIGHT_STEP_FACTOR = 0.5
+THETASTAR_EDGE_FALLBACK_TO_ASTAR = True
+THETASTAR_VERBOSE = True

@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_FMM2D_rank_078",
+  "algorithm": "FMM2D",
+  "success": true,
+  "message": "ok",
+  "path_nodes": 95,
+  "total_cost": 324.69226678847093,
+  "expanded_nodes": null,
+  "visited_nodes": null,
+  "runtime_seconds": null,
+  "start": {
+    "x": 105.54310305,
+    "y": 21.02092294,
+    "z": 0.0,
+    "label": "DK02"
+  },
+  "end": {
+    "x": 105.51294633,
+    "y": 20.99589658,
+    "z": 0.0,
+    "label": "DK04"
+  },
+  "algorithm_path_distance_m": 5788.749748127198,
+  "algorithm_path_distance_km": 5.788749748127198,
+  "algorithm_estimated_traveltime_s": 298.31784484886276,
+  "algorithm_estimated_traveltime_min": 4.971964080814379,
+  "output_path_distance_m": 5788.749748127198,
+  "output_path_distance_km": 5.788749748127198,
+  "output_estimated_traveltime_s": 298.31784484886276,
+  "output_estimated_traveltime_min": 4.971964080814379
+}

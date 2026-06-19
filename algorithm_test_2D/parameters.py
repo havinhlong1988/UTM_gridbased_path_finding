@@ -44,6 +44,34 @@ FIGURE_ROOT_DIR = PROJECT_DIR / "output" / "figures" / "senario1"
 
 PATH_NAME = "path_senario1"
 
+# Store large numbers of per-rank route files here instead of directly in DAT_ROOT_DIR/...
+# Example: output/dat/senario1/FMM2D/route_ranks/path_senario1_FMM2D_rank_001.csv
+ROUTE_RANKS_SUBDIR = "route_ranks"
+
+# Store one summary plot per undirected facility pair here.
+# Example: output/figures/senario1/FMM2D/pair_paths/path_report_FMM2D_pair_DB01_to_DK01.png
+PAIR_PATHS_SUBDIR = "pair_paths"
+PLOT_FMM2D_PAIR_PATHS = True
+
+# START_LABEL/END_LABEL can be a single string or a list.
+# When either one is a list, main.py runs every start/end combination and
+# stores each run in output/.../{algorithm}/label_pairs/{START}_to_{END}/.
+LABEL_PAIR_RUNS_SUBDIR = "label_pairs"
+
+# In label-pair batch mode, save the zoom-in figure in the same pair figure folder.
+# Example:
+#   output/figures/senario1/FMM2D/label_pairs/BD1_to_DK4/path_zoom_FMM2D_from_BD1_to_DK4.png
+PATH_ZOOM_SAVE_IN_SAME_PAIR_DIR = True
+LABEL_PAIR_SKIP_SAME_LABEL = True
+
+# FLZ buffered zone overlay for facility-lane figures.
+# Drawn as a transparent blue cover area around every FLZ node.
+PLOT_FLZ_BUFFER_M = 200.0
+PLOT_FLZ_BUFFER_FACE_COLOR = "#4da3ff"
+PLOT_FLZ_BUFFER_ALPHA = 0.22
+PLOT_FLZ_BUFFER_EDGE_COLOR = "#1f5fbf"
+PLOT_FLZ_BUFFER_EDGE_WIDTH = 0.8
+
 
 # ============================================================
 # Run mode
@@ -148,7 +176,7 @@ PATH_STATUS_BOX_LOCATION = "upper right"
 # Multiple-path algorithm naming rule:
 #     src/astar_multiple.py -> output folder:
 #     astar/multiple/{MULTIPLE_OUTPUT_VALUE}/
-ALGORITHM = ["FMM2D"]
+ALGORITHM = ["thetastar"]
 # ALGORITHM = ["astar", "astar_multiple"]
 
 # If False, continue to the next algorithm if one fails.
@@ -159,8 +187,15 @@ STOP_ON_ALGORITHM_FAILURE = False
 # Start / end nodes
 # ============================================================
 
-START_LABEL = None
-END_LABEL = None
+START_LABEL = ["BD1"]
+END_LABEL = ["DK2"]
+
+# Optional endpoint label aliases and shorthand support.
+# This lets BD1 resolve to DB01 and DK3 resolve to DK03 if those are the
+# real labels in the model. Set to {} if you want exact labels only.
+ENDPOINT_LABEL_PREFIX_ALIASES = {"BD": "DB"}
+LABEL_PAIR_SKIP_SAME_LABEL = True
+LABEL_PAIR_RUNS_SUBDIR = "label_pairs"
 
 # Optional coordinate-based start/end.
 # Use None to use START_LABEL / END_LABEL.
@@ -481,7 +516,7 @@ PLOT_SLOWNESS_CPT_MAX_BOUNDS = 120
 # Plot a zoomed corridor around the final selected path.
 # This is useful to check whether adjacent cells/nodes around the path
 # are flyable or blocked.
-PLOT_PATH_ZOOM_DIAGNOSTIC = False
+PLOT_PATH_ZOOM_DIAGNOSTIC = True
 
 # Corridor half-buffer around the path centerline.
 # Use 100-300 m for local node checking; increase if the path is sparse.
@@ -658,8 +693,8 @@ PATH_ZOOM_SHOW_NEIGHBOR_EDGES = False
 FMM2D_PAIR_MODE = "facility_library"
 FMM2D_PAIR_RETURN_MODE = "all"
 
-# Include only one direction for each unordered facility pair.
-# Example: keep DB01 -> DK01, skip DK01 -> DB01.
+# Build base unordered routes. In path_offset mode, reverse-direction
+# main/backup paths are generated explicitly for every base route.
 FMM2D_PAIR_INCLUDE_DB_DK = True
 FMM2D_PAIR_INCLUDE_DB_DB = True
 FMM2D_PAIR_INCLUDE_DK_DK = True
@@ -677,6 +712,85 @@ MULTI_PATH_SAVE_ALL_K_PATHS = True
 PLOT_MULTIPLE_RANKED_PATHS = True
 PLOT_MULTIPLE_RANKS = "all"
 PLOT_MULTIPLE_MAX_RANK = None
+
+
+
+
+# ============================================================
+# FMM2D spatial collision avoidance / path-offset routing
+# ============================================================
+# Time-offset collision avoidance has been removed.
+# New behavior:
+#   For every base route A--B, generate:
+#     A -> B main
+#     A -> B backup
+#     B -> A main
+#     B -> A backup
+# Paths are spatially separated by a path-offset buffer. Overlap is allowed
+# only inside the service-zone buffer around DB/DK/FLZ and route endpoints.
+# If strict separation cannot produce all 4 paths, the fallback creates the
+# smallest route-level traffic link and marks the affected path(s).
+FMM2D_COLLISION_AVOIDANCE_MODE = "path_offset"
+
+# Number of requested paths per direction.
+FMM2D_PATH_OFFSET_FORWARD_PATHS = 2
+FMM2D_PATH_OFFSET_BACKWARD_PATHS = 2
+
+# Hard spatial separation distance between route alternatives.
+FMM2D_PATH_OFFSET_BUFFER_M = 200.0
+
+# Main/backup lane-pair preference.
+# The backup lane is still not allowed to overlap the main lane outside the
+# path-offset buffer, but it receives a soft penalty when it goes too far away
+# from the same-direction main lane. This makes the backup usable for lane
+# switching during collision avoidance. Forward and backward directions each
+# get their own independent main/backup pair; they do not need to stay close.
+FMM2D_LANE_PAIR_CLOSE_PARALLEL_PRIORITY = True
+FMM2D_LANE_PAIR_PREFERRED_MAX_DISTANCE_M = 450.0
+FMM2D_LANE_PAIR_DISTANCE_WEIGHT = 1.5
+FMM2D_LANE_PAIR_MAX_PENALTY_FACTOR = 25.0
+
+# Optional hard maximum distance from backup lane to the same-direction main lane.
+# None keeps it as a soft priority only, which is safer when no-fly cells are tight.
+FMM2D_LANE_PAIR_HARD_MAX_DISTANCE_M = None
+FMM2D_LANE_PAIR_HARD_LIMIT_FOR_TRAFFIC_LINK = False
+
+# Overlap exception zone around DB/DK/FLZ and route endpoints.
+FMM2D_PATH_OFFSET_ALLOWED_BUFFER_M = 200.0
+FMM2D_PATH_OFFSET_ALLOWED_PREFIXES = ("DB", "DK", "FLZ")
+
+# Try strict non-overlap first. If it fails, allow a penalized shared corridor
+# and tag that corridor as a traffic link.
+FMM2D_PATH_OFFSET_STRICT_BEFORE_TRAFFIC_LINK = True
+FMM2D_TRAFFIC_LINK_BUFFER_M = 200.0
+FMM2D_TRAFFIC_LINK_PENALTY_FACTOR = 50.0
+FMM2D_TRAFFIC_LINK_MINIMIZE = True
+
+# The old schedule/time-offset figure is disabled because path_offset is a
+# spatial routing solution, not a departure-delay solution.
+FMM2D_PLOT_COLLISION_TIME_REPORT = False
+FMM2D_COLLISION_TIME_REPORT_MAX_PATHS = None
+
+
+# ============================================================
+# Path-offset facility-plot style
+# ============================================================
+# Direction background underlay.
+# Forward = A -> B side, Backward = B -> A side.
+PLOT_PATH_OFFSET_FORWARD_BG_COLOR = "yellow"     # yellow
+PLOT_PATH_OFFSET_BACKWARD_BG_COLOR = "#d9d9d9"  # light gray
+PLOT_PATH_OFFSET_DIRECTION_BG_ALPHA = 0.32
+PLOT_PATH_OFFSET_DIRECTION_BG_WIDTH_FACTOR = 5.5
+PLOT_PATH_OFFSET_DIRECTION_BG_MIN_WIDTH = 5.5
+
+# Main/backup line style.
+# Main uses solid lines; backup uses dashed lines.
+PLOT_PATH_OFFSET_BACKUP_DASH_PATTERN = (6, 4)
+
+# Extra fallback shared-corridor buffer for traffic-link paths.
+PLOT_PATH_OFFSET_TRAFFIC_LINK_BG_ALPHA = 0.18
+PLOT_PATH_OFFSET_TRAFFIC_LINK_WIDTH_FACTOR = 7.0
+PLOT_PATH_OFFSET_TRAFFIC_LINK_MIN_WIDTH = 6.0
 
 
 # ============================================================

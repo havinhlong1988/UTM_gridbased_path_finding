@@ -59,6 +59,8 @@ from src.plotting import (
     plot_costmap_surface_outputs,
     plot_model_slowness_side_by_side,
     plot_path_zoom_diagnostic,
+    plot_all_facility_paths_report,
+    plot_facility_pair_path_reports,
 )
 
 from src.costmap import build_predefined_costmap, save_costmap_outputs
@@ -744,7 +746,16 @@ def find_saved_path_files_for_plot(
 
     if is_multiple_algorithm:
         pattern = f"{path_name}_{algorithm_name}_rank_*.csv"
-        files = sorted(output_dir.glob(pattern))
+        route_ranks_subdir = str(get_param("ROUTE_RANKS_SUBDIR", "route_ranks")).strip() or "route_ranks"
+        candidate_dirs = [output_dir / route_ranks_subdir, output_dir]
+        files = []
+        seen_files = set()
+        for candidate_dir in candidate_dirs:
+            for f in sorted(Path(candidate_dir).glob(pattern)):
+                key = str(f.resolve()) if f.exists() else str(f)
+                if key not in seen_files:
+                    files.append(f)
+                    seen_files.add(key)
 
         # If no ranked files exist, fall back to the best-path file.
         if not files:
@@ -893,6 +904,207 @@ def _param_is_none_like(value):
     return False
 
 
+def _is_list_like_endpoint(value) -> bool:
+    """True when START_LABEL or END_LABEL is a list/tuple/set of labels."""
+    if value is None or isinstance(value, str):
+        return False
+    try:
+        iter(value)
+        return True
+    except TypeError:
+        return False
+
+
+
+def _endpoint_label_list(value, name: str) -> list[str]:
+    """Normalize one endpoint setting to a clean list of label strings."""
+    if _param_is_none_like(value):
+        return []
+
+    if isinstance(value, str):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            values = [value]
+
+    clean = []
+    for item in values:
+        if _param_is_none_like(item):
+            continue
+        label = str(item).strip()
+        if not label:
+            continue
+        if label not in clean:
+            clean.append(label)
+
+    if not clean:
+        raise ValueError(f"{name} list is empty after cleaning.")
+    return clean
+
+
+
+def _safe_path_token(value) -> str:
+    """Make a short filesystem-safe token for output subfolders."""
+    import re
+    text = str(value or "").strip()
+    if not text:
+        return "unknown"
+    text = re.sub(r"[^A-Za-z0-9._-]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("._-")
+    return text or "unknown"
+
+
+
+def _endpoint_label_aliases() -> dict:
+    """Return endpoint label prefix aliases for forgiving label input.
+
+    Example:
+        BD1 -> DB01 when the model uses DB01.
+        DK3 -> DK03 when the model uses DK03.
+    """
+    aliases = get_param("ENDPOINT_LABEL_PREFIX_ALIASES", {"BD": "DB"})
+    if aliases is None:
+        aliases = {}
+    try:
+        return {str(k).strip().upper(): str(v).strip().upper() for k, v in dict(aliases).items()}
+    except Exception:
+        return {"BD": "DB"}
+
+
+
+def _endpoint_label_match_key(value) -> str:
+    """Normalize labels for matching while ignoring zero padding.
+
+    Examples:
+        DK3   -> DK3
+        DK03  -> DK3
+        db001 -> DB1
+        BD1   -> DB1  (with default alias BD -> DB)
+    """
+    import re
+    text = str(value or "").strip().upper()
+    text = re.sub(r"[^A-Z0-9]+", "", text)
+    if not text:
+        return ""
+
+    match = re.match(r"^([A-Z]+)([0-9]+)$", text)
+    if match:
+        prefix = match.group(1)
+        number = str(int(match.group(2)))
+        prefix = _endpoint_label_aliases().get(prefix, prefix)
+        return f"{prefix}{number}"
+
+    # Alias pure-prefix labels too, but do not force a number.
+    aliases = _endpoint_label_aliases()
+    for old, new in aliases.items():
+        if text.startswith(old):
+            text = new + text[len(old):]
+            break
+    return text
+
+
+
+def _resolve_endpoint_label_to_model_index(model: pd.DataFrame, requested_label, role_name: str) -> tuple[int, str]:
+    """Resolve START_LABEL/END_LABEL to a real model row index.
+
+    This avoids the dangerous behavior where a loose prefix match such as DK3
+    can accidentally select the first DK node (DK01).  It first tries exact
+    label matching, then zero-padding/alias-insensitive matching.
+    """
+    if _param_is_none_like(requested_label):
+        raise ValueError(f"{role_name} label is None; cannot resolve endpoint label.")
+    if "label" not in model.columns:
+        raise ValueError("Model has no 'label' column; cannot resolve START_LABEL/END_LABEL by label.")
+
+    requested_text = str(requested_label).strip()
+    labels = model["label"].astype(str)
+
+    # 1) Exact case-insensitive match.
+    exact_mask = labels.str.strip().str.upper() == requested_text.upper()
+    exact_indices = [int(i) for i in model.index[exact_mask].tolist()]
+    if exact_indices:
+        idx = exact_indices[0]
+        return idx, str(model.loc[idx, "label"])
+
+    # 2) Fuzzy but still label-specific match: ignore numeric zero padding and
+    # allow configured aliases such as BD -> DB.
+    requested_key = _endpoint_label_match_key(requested_text)
+    match_indices = []
+    for idx, label in labels.items():
+        if _endpoint_label_match_key(label) == requested_key:
+            match_indices.append(int(idx))
+
+    if match_indices:
+        idx = match_indices[0]
+        resolved = str(model.loc[idx, "label"])
+        print(f"      {role_name} label resolved: {requested_text!r} -> {resolved!r} (index {idx})")
+        return idx, resolved
+
+    # 3) Give useful nearby options instead of silently using the first DB/DK.
+    requested_prefix = ""
+    import re
+    m = re.match(r"^([A-Za-z]+)", requested_text.strip())
+    if m:
+        requested_prefix = _endpoint_label_aliases().get(m.group(1).upper(), m.group(1).upper())
+
+    suggestions = []
+    if requested_prefix:
+        for label in labels.dropna().astype(str).unique().tolist():
+            key = _endpoint_label_match_key(label)
+            if key.startswith(requested_prefix):
+                suggestions.append(str(label))
+            if len(suggestions) >= 12:
+                break
+
+    hint = f" Available {requested_prefix} labels: {suggestions}" if suggestions else ""
+    raise ValueError(
+        f"Could not find {role_name} label {requested_text!r} in the model."
+        f" Use the exact model label, e.g. DB01/DK03, or configure ENDPOINT_LABEL_PREFIX_ALIASES."
+        f"{hint}"
+    )
+
+
+
+def _build_start_end_label_runs():
+    """Build start/end label combinations when either endpoint is a list.
+
+    Single-string START_LABEL/END_LABEL keeps the old single-run behavior.
+    List mode supports one side as a list and the other side as a string.
+    """
+    start_value = get_param("START_LABEL", None)
+    end_value = get_param("END_LABEL", None)
+    start_coord = get_param("START_COORD", None)
+    end_coord = get_param("END_COORD", None)
+
+    list_mode = _is_list_like_endpoint(start_value) or _is_list_like_endpoint(end_value)
+    if not list_mode:
+        return []
+
+    if not _param_is_none_like(start_coord) or not _param_is_none_like(end_coord):
+        raise ValueError(
+            "START_LABEL/END_LABEL list mode cannot be mixed with START_COORD/END_COORD. "
+            "Set START_COORD=None and END_COORD=None."
+        )
+
+    starts = _endpoint_label_list(start_value, "START_LABEL")
+    ends = _endpoint_label_list(end_value, "END_LABEL")
+    skip_same = bool(get_param("LABEL_PAIR_SKIP_SAME_LABEL", True))
+
+    runs = []
+    for s in starts:
+        for e in ends:
+            if skip_same and str(s) == str(e):
+                continue
+            tag = f"{_safe_path_token(s)}_to_{_safe_path_token(e)}"
+            runs.append({"start_label": s, "end_label": e, "tag": tag})
+
+    if not runs:
+        raise ValueError("No START_LABEL/END_LABEL combinations to run after filtering.")
+    return runs
+
+
 def _is_fmm2d_all_facility_request(algorithm_name):
     """True when FMM2D should compute/return all DB/DK facility-pair paths."""
     if str(algorithm_name).strip().lower() != "fmm2d":
@@ -1022,6 +1234,76 @@ def _plot_all_facility_paths_report(
     target_indices = set()
     labels_by_idx = {}
 
+    # Direction background fill and role line style
+    # -------------------------------------------
+    # User request:
+    #   - forward lane background : light yellow
+    #   - backward lane background: light gray
+    #   - main lane               : solid line
+    #   - backup lane             : dashed line
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    forward_bg_color = str(get_param("PLOT_PATH_OFFSET_FORWARD_BG_COLOR", "yellow"))
+    backward_bg_color = str(get_param("PLOT_PATH_OFFSET_BACKWARD_BG_COLOR", "#d9d9d9"))
+    direction_bg_alpha = float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_ALPHA", 0.32))
+    direction_bg_width_factor = float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_WIDTH_FACTOR", 5.5))
+    direction_bg_min_width = float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_MIN_WIDTH", 5.5))
+    traffic_link_bg_alpha = float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_BG_ALPHA", 0.18))
+    traffic_link_width_factor = float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_WIDTH_FACTOR", 7.0))
+    traffic_link_min_width = float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_MIN_WIDTH", 6.0))
+    backup_dash_pattern = get_param("PLOT_PATH_OFFSET_BACKUP_DASH_PATTERN", (6, 4))
+
+    def _direction_bg_color(item):
+        direction = str(item.get("path_offset_direction", "")).strip().lower()
+        if direction == "backward":
+            return backward_bg_color
+        return forward_bg_color
+
+    # Draw direction background corridors first.
+    # Every path receives a soft, wide underlay to make direction visually clear.
+    forward_bg_drawn = False
+    backward_bg_drawn = False
+    traffic_label_drawn = False
+    for item in valid_paths:
+        path = [int(v) for v in item.get("path_indices", []) if 0 <= int(v) < n_model]
+        if len(path) < 2:
+            continue
+
+        bg_color = _direction_bg_color(item)
+        direction = str(item.get("path_offset_direction", "")).strip().lower()
+        label = None
+        if direction == "backward" and not backward_bg_drawn:
+            label = "Backward corridor"
+            backward_bg_drawn = True
+        elif direction != "backward" and not forward_bg_drawn:
+            label = "Forward corridor"
+            forward_bg_drawn = True
+
+        ax.plot(
+            x[path], y[path],
+            color=bg_color,
+            linewidth=max(direction_bg_min_width, float(path_line_width) * direction_bg_width_factor),
+            alpha=direction_bg_alpha,
+            solid_capstyle="round",
+            zorder=2,
+            label=label,
+        )
+
+        # Traffic-link fallback gets an extra clouded/shared-corridor band on top
+        # of the direction background.
+        if bool(item.get("traffic_link_required", False)):
+            ax.plot(
+                x[path], y[path],
+                color="0.35",
+                linewidth=max(traffic_link_min_width, float(path_line_width) * traffic_link_width_factor),
+                alpha=traffic_link_bg_alpha,
+                solid_capstyle="round",
+                zorder=3,
+                label="Traffic-link buffer" if not traffic_label_drawn else None,
+            )
+            traffic_label_drawn = True
+
     for i, item in enumerate(valid_paths):
         rank = int(item.get("rank", i + 1))
         path = [int(v) for v in item.get("path_indices", []) if 0 <= int(v) < n_model]
@@ -1029,14 +1311,24 @@ def _plot_all_facility_paths_report(
             continue
 
         color = cmap(norm(rank))
-        alpha = 0.78 if len(valid_paths) <= 80 else 0.45
-        ax.plot(
+        alpha = 0.88 if len(valid_paths) <= 80 else 0.55
+        role = str(item.get("path_offset_role", "main")).strip().lower()
+        is_backup = (role == "backup")
+        linestyle = "--" if is_backup else "-"
+
+        line, = ax.plot(
             x[path], y[path],
             color=color,
-            linewidth=max(0.8, float(path_line_width) * (0.65 if len(valid_paths) > 80 else 1.0)),
+            linewidth=max(0.9, float(path_line_width) * (0.70 if len(valid_paths) > 80 else 1.10)),
             alpha=alpha,
+            linestyle=linestyle,
             zorder=4,
         )
+        if is_backup:
+            try:
+                line.set_dashes(tuple(backup_dash_pattern))
+            except Exception:
+                pass
 
         src = int(item.get("source_idx", path[0]))
         dst = int(item.get("target_idx", path[-1]))
@@ -1096,17 +1388,41 @@ def _plot_all_facility_paths_report(
     unique_sources = len(source_indices)
     unique_targets = len(target_indices)
     pair_count = len(valid_paths)
-    ax.set_title(f"Scenario 1 all fastest facility paths - {algorithm_name}", fontsize=18, fontweight="bold")
+    ax.set_title(f"Scenario 1 facility path-offset routes - {algorithm_name}", fontsize=18, fontweight="bold")
     ax.set_xlabel(xcol)
     ax.set_ylabel(ycol)
     ax.grid(False)
-    ax.legend(loc="upper left", frameon=True, fancybox=False, edgecolor="black", fontsize=9)
 
+    # Add a small style legend so the map clearly distinguishes
+    # direction background and main/backup lane role.
+    style_handles = [
+        Patch(facecolor=forward_bg_color, edgecolor="none", alpha=direction_bg_alpha, label="Forward corridor"),
+        Patch(facecolor=backward_bg_color, edgecolor="none", alpha=direction_bg_alpha, label="Backward corridor"),
+        Line2D([0], [0], color="black", lw=max(1.2, float(path_line_width) * 1.10), linestyle="-", label="Main lane"),
+        Line2D([0], [0], color="black", lw=max(1.2, float(path_line_width) * 1.10), linestyle="--", label="Backup lane"),
+    ]
+    if traffic_label_drawn:
+        style_handles.append(
+            Line2D([0], [0], color="0.35", lw=max(traffic_link_min_width, float(path_line_width) * 2.0), alpha=traffic_link_bg_alpha, label="Traffic-link buffer")
+        )
+    handles, labels = ax.get_legend_handles_labels()
+    merged_handles = []
+    merged_labels = []
+    for h, l in list(zip(handles, labels)) + [(h, h.get_label()) for h in style_handles]:
+        if not l or l in merged_labels:
+            continue
+        merged_handles.append(h)
+        merged_labels.append(l)
+    ax.legend(merged_handles, merged_labels, loc="upper left", frameon=True, fancybox=False, edgecolor="black", fontsize=9)
+
+    traffic_link_count = len({str(item.get("traffic_link_id", "")) for item in valid_paths if str(item.get("traffic_link_id", ""))})
+    strict_count = sum(1 for item in valid_paths if bool(item.get("path_offset_strict", False)))
     text = (
         f"Paths plotted: {pair_count}\n"
+        f"Strict paths: {strict_count}\n"
+        f"Traffic links: {traffic_link_count}\n"
         f"Unique starts: {unique_sources}\n"
-        f"Unique ends: {unique_targets}\n"
-        f"Self/same-label pairs: skipped"
+        f"Unique ends: {unique_targets}"
     )
     ax.text(
         0.99, 0.99, text,
@@ -1124,7 +1440,12 @@ def _plot_all_facility_paths_report(
 
 
 
-def run_one_algorithm(algorithm_name):
+def run_one_algorithm(
+    algorithm_name,
+    start_label_override=None,
+    end_label_override=None,
+    pair_run_tag: str | None = None,
+):
     run_total_start_time = time.perf_counter()
     algorithm_search_elapsed_s = 0.0
     print_processing_time = bool(get_param("PRINT_PROCESSING_TIME", True))
@@ -1189,6 +1510,16 @@ def run_one_algorithm(algorithm_name):
         )
     )
 
+    # ============================================================
+    # Start/end settings
+    # ============================================================
+    # Normal mode reads from parameters.py. Batch list mode passes overrides
+    # so START_LABEL=[...] and END_LABEL=[...] can run every pair.
+    start_label = start_label_override if start_label_override is not None else get_param("START_LABEL", None)
+    end_label = end_label_override if end_label_override is not None else get_param("END_LABEL", None)
+    start_coord = get_param("START_COORD", None)
+    end_coord = get_param("END_COORD", None)
+
     if is_multiple_algorithm:
         output_dir = dat_root_dir / algorithm_base_name / "multiple" / str(multiple_run_value)
         algorithm_figure_dir = figure_root_dir / algorithm_base_name / "multiple" / str(multiple_run_value)
@@ -1196,15 +1527,21 @@ def run_one_algorithm(algorithm_name):
         output_dir = dat_root_dir / algorithm_name
         algorithm_figure_dir = figure_root_dir / algorithm_name
 
+    # In START_LABEL/END_LABEL list mode, keep every pair in its own folder
+    # to avoid overwriting summary CSV, route_ranks, figures, and timing files.
+    if pair_run_tag:
+        label_pair_runs_subdir = str(get_param("LABEL_PAIR_RUNS_SUBDIR", "label_pairs")).strip() or "label_pairs"
+        output_dir = output_dir / label_pair_runs_subdir / str(pair_run_tag)
+        algorithm_figure_dir = algorithm_figure_dir / label_pair_runs_subdir / str(pair_run_tag)
+
+    # Keep the many per-rank route files out of the main output folder.
+    # Summary CSV files stay in output_dir; rank_XXX CSV/XYZ/step files go here.
+    route_ranks_subdir = str(get_param("ROUTE_RANKS_SUBDIR", "route_ranks")).strip() or "route_ranks"
+    route_ranks_output_dir = output_dir / route_ranks_subdir
+    pair_paths_subdir = str(get_param("PAIR_PATHS_SUBDIR", "pair_paths")).strip() or "pair_paths"
+    pair_paths_figure_dir = algorithm_figure_dir / pair_paths_subdir
 
 
-    # ============================================================
-    # Start/end settings
-    # ============================================================
-    start_label = get_param("START_LABEL", None)
-    end_label = get_param("END_LABEL", None)
-    start_coord = get_param("START_COORD", None)
-    end_coord = get_param("END_COORD", None)
 
     # FMM2D can compute and plot all fastest DB/DK facility-pair paths.
     # In that mode START_LABEL/END_LABEL/START_COORD/END_COORD may all be None.
@@ -1428,6 +1765,7 @@ def run_one_algorithm(algorithm_name):
     # ============================================================
     dat_root_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
+    route_ranks_output_dir.mkdir(parents=True, exist_ok=True)
     figure_root_dir.mkdir(parents=True, exist_ok=True)
     algorithm_figure_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1440,9 +1778,13 @@ def run_one_algorithm(algorithm_name):
     print(f"Model file       : {model_file}")
     print(f"Algorithm module : {algorithm_name}")
     print(f"Algorithm output : {algorithm_base_name}")
+    if pair_run_tag:
+        print(f"Label pair run   : {start_label} -> {end_label}")
     if is_multiple_algorithm:
         print(f"Multiple run n   : {multiple_run_value}")
     print(f"Data output dir  : {output_dir}")
+    print(f"Route ranks dir  : {route_ranks_output_dir}")
+    print(f"Pair paths dir   : {pair_paths_figure_dir}")
     print(f"Figure dir       : {algorithm_figure_dir}")
     print(f"Report figure    : {report_figure_file}")
     print(f"Initiate figure  : {initiate_figure_file}")
@@ -1606,13 +1948,31 @@ def run_one_algorithm(algorithm_name):
         print(f"      Dummy start index: {start_idx} | {model.loc[start_idx, 'label']}")
         print(f"      Dummy end index  : {end_idx} | {model.loc[end_idx, 'label']}")
     else:
-        start_idx, end_idx = find_start_end_indices(
-            model,
-            start_label=start_label,
-            end_label=end_label,
-            start_coord=start_coord,
-            end_coord=end_coord,
-        )
+        # For label-driven runs, resolve labels directly against the model.
+        # This makes START_LABEL=["BD1", ...], END_LABEL=["DK3", ...] use the
+        # real endpoint positions, not only different output names.  It also
+        # prevents loose prefix matching from selecting DK01 for every DK* run.
+        if _param_is_none_like(start_coord) and _param_is_none_like(end_coord):
+            start_idx, resolved_start_label = _resolve_endpoint_label_to_model_index(
+                model, start_label, "START_LABEL"
+            )
+            end_idx, resolved_end_label = _resolve_endpoint_label_to_model_index(
+                model, end_label, "END_LABEL"
+            )
+            if str(resolved_start_label) != str(start_label) or str(resolved_end_label) != str(end_label):
+                print(
+                    "      Resolved endpoint pair: "
+                    f"{start_label!r}->{end_label!r} becomes "
+                    f"{resolved_start_label!r}->{resolved_end_label!r}"
+                )
+        else:
+            start_idx, end_idx = find_start_end_indices(
+                model,
+                start_label=start_label,
+                end_label=end_label,
+                start_coord=start_coord,
+                end_coord=end_coord,
+            )
 
     print(f"      Start index: {start_idx}")
     print(f"      End index  : {end_idx}")
@@ -1924,6 +2284,13 @@ def run_one_algorithm(algorithm_name):
         )
 
     algorithm_kwargs = {
+        # Pass the resolved labels to algorithms that care about labels.
+        # This is important in label-list mode where the requested label may be
+        # shorthand (DK3) or alias (BD1), while the model label is DK03/DB01.
+        "START_LABEL": str(model.loc[int(start_idx), "label"]) if "label" in model.columns else str(start_label),
+        "END_LABEL": str(model.loc[int(end_idx), "label"]) if "label" in model.columns else str(end_label),
+        "REQUESTED_START_LABEL": str(start_label),
+        "REQUESTED_END_LABEL": str(end_label),
         "k_paths": int(get_param("MULTI_PATH_K_PATHS", 1)),
         "turn_weight": float(get_param("MULTI_PATH_TURN_WEIGHT", 0.0)),
         "turn_angle_threshold_degree": float(
@@ -1972,6 +2339,13 @@ def run_one_algorithm(algorithm_name):
             "MULTI_PATH_MAX_EXPANSIONS_PER_CANDIDATE", None
         ),
     }
+
+    # START_LABEL/END_LABEL list mode is explicit selected-pair mode.
+    # Without this override, FMM2D would still read FMM2D_PAIR_MODE="facility_library"
+    # from parameters.py and recompute the whole facility library for every pair.
+    if pair_run_tag and str(algorithm_name).strip().lower() == "fmm2d":
+        algorithm_kwargs["FMM2D_PAIR_MODE"] = "selected"
+        algorithm_kwargs["FMM2D_PAIR_RETURN_MODE"] = "requested"
 
     # Only pass parameters accepted by the selected algorithm.
     # This keeps other algorithms such as flood_fill compatible.
@@ -2165,7 +2539,10 @@ def run_one_algorithm(algorithm_name):
     exported_k_paths = []
 
     if save_all_k_paths and len(all_path_results) > 1:
+        route_ranks_output_dir.mkdir(parents=True, exist_ok=True)
+        exported["route_ranks_dir"] = str(route_ranks_output_dir)
         print(f"      Exporting all ranked paths: {len(all_path_results)}")
+        print(f"      Route-rank files dir     : {route_ranks_output_dir}")
 
         for path_item in all_path_results:
             rank = int(path_item.get("rank", len(exported_k_paths) + 1))
@@ -2203,7 +2580,13 @@ def run_one_algorithm(algorithm_name):
             ranked_result["total_turn_angle_degree"] = float(path_item.get("total_turn_angle_degree", 0.0))
             for meta_key in (
                 "source_idx", "target_idx", "source_label", "target_label",
-                "pair_type", "pair_key", "pair_undirected_key", "direct_distance_m",
+                "pair_type", "pair_key", "pair_undirected_key", "route_id", "direct_distance_m",
+                "path_offset_direction", "path_offset_role", "path_offset_role_index",
+                "path_offset_strict", "path_offset_status", "path_offset_overlap_nodes",
+                "path_offset_conflict_with", "traffic_link_required", "traffic_link_id",
+                "traffic_link_buffer_m", "traffic_link_node_count",
+                "collision_avoidance_mode", "collision_checked", "collision_free",
+                "collision_duration_s", "collision_min_distance_m",
             ):
                 if meta_key in path_item:
                     ranked_result[meta_key] = path_item.get(meta_key)
@@ -2220,7 +2603,7 @@ def run_one_algorithm(algorithm_name):
             ranked_export = export_path_outputs(
                 model=model,
                 path_indices=ranked_path_indices,
-                output_dir=output_dir,
+                output_dir=route_ranks_output_dir,
                 path_name=f"{path_name}_{algorithm_name}_rank_{rank:03d}",
                 algorithm_name=algorithm_name,
                 result=ranked_result,
@@ -2273,6 +2656,23 @@ def run_one_algorithm(algorithm_name):
                     "source_idx": path_item.get("source_idx", ""),
                     "target_idx": path_item.get("target_idx", ""),
                     "direct_distance_m": path_item.get("direct_distance_m", ""),
+                    "route_id": path_item.get("route_id", path_item.get("pair_undirected_key", "")),
+                    "path_offset_direction": path_item.get("path_offset_direction", ""),
+                    "path_offset_role": path_item.get("path_offset_role", ""),
+                    "path_offset_role_index": path_item.get("path_offset_role_index", ""),
+                    "path_offset_strict": path_item.get("path_offset_strict", ""),
+                    "path_offset_status": path_item.get("path_offset_status", ""),
+                    "path_offset_overlap_nodes": path_item.get("path_offset_overlap_nodes", ""),
+                    "path_offset_conflict_with": path_item.get("path_offset_conflict_with", ""),
+                    "traffic_link_required": path_item.get("traffic_link_required", ""),
+                    "traffic_link_id": path_item.get("traffic_link_id", ""),
+                    "traffic_link_buffer_m": path_item.get("traffic_link_buffer_m", ""),
+                    "traffic_link_node_count": path_item.get("traffic_link_node_count", ""),
+                    "collision_avoidance_mode": path_item.get("collision_avoidance_mode", ""),
+                    "collision_checked": path_item.get("collision_checked", ""),
+                    "collision_free": path_item.get("collision_free", ""),
+                    "collision_duration_s": path_item.get("collision_duration_s", ""),
+                    "collision_min_distance_m": path_item.get("collision_min_distance_m", ""),
                     "total_cost": float(path_item.get("total_cost", path_item.get("cost", 0.0))),
                     "travel_cost": float(path_item.get("travel_cost", 0.0)),
                     "turn_cost": float(path_item.get("turn_cost", 0.0)),
@@ -2326,6 +2726,20 @@ def run_one_algorithm(algorithm_name):
                     "pair_type": path_item.get("pair_type", ""),
                     "source_idx": path_item.get("source_idx", ""),
                     "target_idx": path_item.get("target_idx", ""),
+                    "route_id": path_item.get("route_id", path_item.get("pair_undirected_key", "")),
+                    "path_offset_direction": path_item.get("path_offset_direction", ""),
+                    "path_offset_role": path_item.get("path_offset_role", ""),
+                    "path_offset_strict": path_item.get("path_offset_strict", ""),
+                    "path_offset_status": path_item.get("path_offset_status", ""),
+                    "path_offset_overlap_nodes": path_item.get("path_offset_overlap_nodes", ""),
+                    "traffic_link_required": path_item.get("traffic_link_required", ""),
+                    "traffic_link_id": path_item.get("traffic_link_id", ""),
+                    "traffic_link_buffer_m": path_item.get("traffic_link_buffer_m", ""),
+                    "traffic_link_node_count": path_item.get("traffic_link_node_count", ""),
+                    "collision_avoidance_mode": path_item.get("collision_avoidance_mode", ""),
+                    "collision_checked": path_item.get("collision_checked", ""),
+                    "collision_free": path_item.get("collision_free", ""),
+                    "collision_min_distance_m": path_item.get("collision_min_distance_m", ""),
                     "total_cost": float(path_item.get("total_cost", path_item.get("cost", 0.0))),
                     "travel_cost": float(path_item.get("travel_cost", 0.0)),
                     "path_distance_m": float(path_item.get("distance_m", 0.0)),
@@ -2414,7 +2828,7 @@ def run_one_algorithm(algorithm_name):
             )
 
             if fmm2d_all_facility_mode:
-                _plot_all_facility_paths_report(
+                plot_all_facility_paths_report(
                     model=model,
                     ranked_paths=selected_ranked_paths,
                     figure_file=multiple_figure_file,
@@ -2425,7 +2839,25 @@ def run_one_algorithm(algorithm_name):
                     model_marker_size=plot_model_marker_size,
                     path_line_width=plot_path_line_width,
                     plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+                    plot_no_fly_prefixes=plot_no_fly_prefixes,
                     plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+                    plot_show_flz_overlay=plot_show_flz_overlay,
+                    always_flyable_prefixes=plot_always_flyable_prefixes,
+                    result=result if plot_report_text_box else None,
+                    forward_bg_color=get_param("PLOT_PATH_OFFSET_FORWARD_BG_COLOR", "yellow"),
+                    backward_bg_color=get_param("PLOT_PATH_OFFSET_BACKWARD_BG_COLOR", "#d9d9d9"),
+                    direction_bg_alpha=float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_ALPHA", 0.32)),
+                    direction_bg_width_factor=float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_WIDTH_FACTOR", 5.5)),
+                    direction_bg_min_width=float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_MIN_WIDTH", 5.5)),
+                    traffic_link_bg_alpha=float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_BG_ALPHA", 0.18)),
+                    traffic_link_width_factor=float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_WIDTH_FACTOR", 7.0)),
+                    traffic_link_min_width=float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_MIN_WIDTH", 6.0)),
+                    backup_dash_pattern=get_param("PLOT_PATH_OFFSET_BACKUP_DASH_PATTERN", (6, 4)),
+                    flz_buffer_m=float(get_param("PLOT_FLZ_BUFFER_M", 200.0)),
+                    flz_buffer_facecolor=get_param("PLOT_FLZ_BUFFER_FACE_COLOR", "#4da3ff"),
+                    flz_buffer_alpha=float(get_param("PLOT_FLZ_BUFFER_ALPHA", 0.22)),
+                    flz_buffer_edgecolor=get_param("PLOT_FLZ_BUFFER_EDGE_COLOR", "#1f5fbf"),
+                    flz_buffer_edgewidth=float(get_param("PLOT_FLZ_BUFFER_EDGE_WIDTH", 0.8)),
                 )
             else:
                 plot_multiple_paths_report(
@@ -2449,12 +2881,66 @@ def run_one_algorithm(algorithm_name):
             exported["multiple_path_figure"] = str(multiple_figure_file)
             print(f"      Multiple-path plot: {multiple_figure_file}")
 
+            if fmm2d_all_facility_mode and bool(get_param("PLOT_FMM2D_PAIR_PATHS", True)):
+                try:
+                    pair_paths_figure_dir.mkdir(parents=True, exist_ok=True)
+                    pair_outputs = plot_facility_pair_path_reports(
+                        model=model,
+                        ranked_paths=selected_ranked_paths,
+                        figure_dir=pair_paths_figure_dir,
+                        algorithm_name=algorithm_name,
+                        max_model_points=plot_max_model_points,
+                        dpi=plot_dpi,
+                        model_alpha=plot_model_alpha,
+                        model_marker_size=plot_model_marker_size,
+                        path_line_width=plot_path_line_width,
+                        plot_model_as_flyable_nofly=plot_model_as_flyable_nofly,
+                        plot_no_fly_prefixes=plot_no_fly_prefixes,
+                        plot_no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+                        plot_show_flz_overlay=plot_show_flz_overlay,
+                        always_flyable_prefixes=plot_always_flyable_prefixes,
+                        result=result if plot_report_text_box else None,
+                        forward_bg_color=get_param("PLOT_PATH_OFFSET_FORWARD_BG_COLOR", "yellow"),
+                        backward_bg_color=get_param("PLOT_PATH_OFFSET_BACKWARD_BG_COLOR", "#d9d9d9"),
+                        direction_bg_alpha=float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_ALPHA", 0.32)),
+                        direction_bg_width_factor=float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_WIDTH_FACTOR", 5.5)),
+                        direction_bg_min_width=float(get_param("PLOT_PATH_OFFSET_DIRECTION_BG_MIN_WIDTH", 5.5)),
+                        traffic_link_bg_alpha=float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_BG_ALPHA", 0.18)),
+                        traffic_link_width_factor=float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_WIDTH_FACTOR", 7.0)),
+                        traffic_link_min_width=float(get_param("PLOT_PATH_OFFSET_TRAFFIC_LINK_MIN_WIDTH", 6.0)),
+                        backup_dash_pattern=get_param("PLOT_PATH_OFFSET_BACKUP_DASH_PATTERN", (6, 4)),
+                        flz_buffer_m=float(get_param("PLOT_FLZ_BUFFER_M", 200.0)),
+                        flz_buffer_facecolor=get_param("PLOT_FLZ_BUFFER_FACE_COLOR", "#4da3ff"),
+                        flz_buffer_alpha=float(get_param("PLOT_FLZ_BUFFER_ALPHA", 0.22)),
+                        flz_buffer_edgecolor=get_param("PLOT_FLZ_BUFFER_EDGE_COLOR", "#1f5fbf"),
+                        flz_buffer_edgewidth=float(get_param("PLOT_FLZ_BUFFER_EDGE_WIDTH", 0.8)),
+                    )
+                    exported["pair_path_figure_dir"] = str(pair_paths_figure_dir)
+                    exported["pair_path_figures"] = pair_outputs
+                    print(f"      Pair-path plots : {len(pair_outputs)} file(s) in {pair_paths_figure_dir}")
+                except Exception as exc:
+                    print(f"[WARNING] Could not plot pair-path figures: {exc}")
+
+
+    # ============================================================
+    # Spatial path-offset collision avoidance is handled inside FMM2D.
+    # The old departure-time offset report is intentionally removed.
+    # ============================================================
+
     # ============================================================
     # ZOOM. Plot path-corridor diagnostic for adjacent-node checking
     # ============================================================
     if plot_path_zoom_diagnostic_flag:
+        # Keep the zoom-in diagnostic in the same figure directory as the
+        # corresponding path report.  In START_LABEL/END_LABEL list mode this
+        # means, for example:
+        #   output/figures/senario1/FMM2D/label_pairs/BD1_to_DK4/
+        #       path_report_FMM2D_from_BD1_to_DK4.png
+        #       path_zoom_FMM2D_from_BD1_to_DK4.png
+        zoom_figure_dir = algorithm_figure_dir
+        zoom_figure_dir.mkdir(parents=True, exist_ok=True)
         zoom_figure_file = (
-            algorithm_figure_dir
+            zoom_figure_dir
             / f"path_zoom_{algorithm_name}_from_{safe_start_label}_to_{safe_end_label}.png"
         )
         print("[ZOOM] Plotting path-corridor diagnostic...")
@@ -2582,53 +3068,97 @@ def main():
     algorithm_timing_summaries = []
     stop_on_failure = bool(get_param("STOP_ON_ALGORITHM_FAILURE", False))
 
-    for i, algorithm_name in enumerate(algorithms, start=1):
-        print("\n" + "#" * 70)
-        print(f"RUN {i}/{len(algorithms)}: {algorithm_name}")
-        print("#" * 70)
+    label_runs = _build_start_end_label_runs()
+    if label_runs:
+        print("Start/end label list mode: ON")
+        print(f"Endpoint combinations: {len(label_runs)}")
+        for run in label_runs:
+            print(f"  - {run['start_label']} -> {run['end_label']}")
+    else:
+        print("Start/end label list mode: OFF")
 
-        algorithm_loop_start_time = time.perf_counter()
-        try:
-            timing_summary = run_one_algorithm(algorithm_name)
-            algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
-            if isinstance(timing_summary, dict):
-                algorithm_timing_summaries.append(timing_summary)
-            else:
+    total_runs = len(algorithms) * (len(label_runs) if label_runs else 1)
+    run_counter = 0
+
+    for algorithm_name in algorithms:
+        current_label_runs = label_runs if label_runs else [None]
+
+        for label_run in current_label_runs:
+            run_counter += 1
+            run_name = str(algorithm_name)
+            start_override = None
+            end_override = None
+            pair_run_tag = None
+            if label_run is not None:
+                start_override = label_run["start_label"]
+                end_override = label_run["end_label"]
+                pair_run_tag = label_run["tag"]
+                run_name = f"{algorithm_name}:{pair_run_tag}"
+
+            print("\n" + "#" * 70)
+            print(f"RUN {run_counter}/{total_runs}: {run_name}")
+            print("#" * 70)
+
+            algorithm_loop_start_time = time.perf_counter()
+            try:
+                timing_summary = run_one_algorithm(
+                    algorithm_name,
+                    start_label_override=start_override,
+                    end_label_override=end_override,
+                    pair_run_tag=pair_run_tag,
+                )
+                algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
+                if isinstance(timing_summary, dict):
+                    if pair_run_tag:
+                        timing_summary["label_pair_run"] = pair_run_tag
+                        timing_summary["start_label"] = start_override
+                        timing_summary["end_label"] = end_override
+                    algorithm_timing_summaries.append(timing_summary)
+                else:
+                    algorithm_timing_summaries.append({
+                        "algorithm": str(algorithm_name),
+                        "label_pair_run": pair_run_tag or "",
+                        "start_label": start_override or "",
+                        "end_label": end_override or "",
+                        "processing_time_total_s": float(algorithm_loop_elapsed_s),
+                        "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
+                    })
+            except SystemExit:
+                algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
+                failed.append(run_name)
                 algorithm_timing_summaries.append({
                     "algorithm": str(algorithm_name),
+                    "label_pair_run": pair_run_tag or "",
+                    "start_label": start_override or "",
+                    "end_label": end_override or "",
+                    "success": False,
                     "processing_time_total_s": float(algorithm_loop_elapsed_s),
                     "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
                 })
-        except SystemExit:
-            algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
-            failed.append(algorithm_name)
-            algorithm_timing_summaries.append({
-                "algorithm": str(algorithm_name),
-                "success": False,
-                "processing_time_total_s": float(algorithm_loop_elapsed_s),
-                "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
-            })
-            print(f"[FAILED] Algorithm failed: {algorithm_name}")
-            if print_processing_time:
-                print(f"Processing time before failure: {format_elapsed_time(algorithm_loop_elapsed_s)}")
-            if stop_on_failure:
-                raise
-        except Exception as exc:
-            algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
-            failed.append(algorithm_name)
-            algorithm_timing_summaries.append({
-                "algorithm": str(algorithm_name),
-                "success": False,
-                "processing_time_total_s": float(algorithm_loop_elapsed_s),
-                "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
-                "error": str(exc),
-            })
-            print(f"[FAILED] Algorithm failed: {algorithm_name}")
-            print(f"Reason: {exc}")
-            if print_processing_time:
-                print(f"Processing time before failure: {format_elapsed_time(algorithm_loop_elapsed_s)}")
-            if stop_on_failure:
-                raise
+                print(f"[FAILED] Algorithm failed: {run_name}")
+                if print_processing_time:
+                    print(f"Processing time before failure: {format_elapsed_time(algorithm_loop_elapsed_s)}")
+                if stop_on_failure:
+                    raise
+            except Exception as exc:
+                algorithm_loop_elapsed_s = time.perf_counter() - algorithm_loop_start_time
+                failed.append(run_name)
+                algorithm_timing_summaries.append({
+                    "algorithm": str(algorithm_name),
+                    "label_pair_run": pair_run_tag or "",
+                    "start_label": start_override or "",
+                    "end_label": end_override or "",
+                    "success": False,
+                    "processing_time_total_s": float(algorithm_loop_elapsed_s),
+                    "processing_time_total_text": format_elapsed_time(algorithm_loop_elapsed_s),
+                    "error": str(exc),
+                })
+                print(f"[FAILED] Algorithm failed: {run_name}")
+                print(f"Reason: {exc}")
+                if print_processing_time:
+                    print(f"Processing time before failure: {format_elapsed_time(algorithm_loop_elapsed_s)}")
+                if stop_on_failure:
+                    raise
 
     print("\n" + "=" * 70)
     print("BATCH DONE")
@@ -2646,6 +3176,9 @@ def main():
         print("Processing time summary:")
         for item in algorithm_timing_summaries:
             name = item.get("algorithm", "unknown")
+            pair_tag = str(item.get("label_pair_run", "") or "")
+            if pair_tag:
+                name = f"{name}:{pair_tag}"
             total_text = item.get("processing_time_total_text")
             if total_text is None:
                 total_text = format_elapsed_time(item.get("processing_time_total_s", 0.0))
