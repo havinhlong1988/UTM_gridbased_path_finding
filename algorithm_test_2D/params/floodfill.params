@@ -1,0 +1,35 @@
+# ============================================================
+# floodfill.params
+# ============================================================
+# Algorithm-specific settings for:
+#     src/floodfill.py
+#
+# Use in parameters.py:
+#     ALGORITHM = ["floodfill"]
+#
+# Floodfill is a BFS connectivity diagnostic. It ignores slowness magnitude
+# after main.py has already built the traversable graph, so it finds the path
+# with the smallest number of graph steps.
+# ============================================================
+
+# Maximum number of BFS node expansions.
+# None means use the generic MULTI_PATH_MAX_EXPANSIONS value passed by main.py.
+# For your current 15k-node model, None or 5_000_000 is safe.
+FLOODFILL_MAX_EXPANSIONS = None
+
+# Print BFS progress messages.
+FLOODFILL_VERBOSE = True
+
+# Print one progress line every N expansions when FLOODFILL_VERBOSE=True.
+FLOODFILL_PROGRESS_INTERVAL = 100000
+
+# Tie-breaking option.
+# False = fastest and preserves graph neighbor order.
+# True  = still BFS/minimum graph steps, but among same-depth options it tries
+#         neighbors closer to the goal first. This can make the diagnostic path
+#         cleaner, but may add small sorting overhead.
+FLOODFILL_SORT_NEIGHBORS_BY_GOAL = False
+
+# If model x/y are lon/lat degrees and goal-neighbor sorting is enabled,
+# scale lon/lat approximately to meters before comparing distances.
+FLOODFILL_LONLAT_DISTANCE_SCALE = True
