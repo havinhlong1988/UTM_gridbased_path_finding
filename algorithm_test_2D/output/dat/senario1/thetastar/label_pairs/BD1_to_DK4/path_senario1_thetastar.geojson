@@ -1,0 +1,42 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "path_senario1_thetastar",
+        "algorithm": "thetastar",
+        "success": true,
+        "total_cost": 159.83178345431512,
+        "path_nodes": 4,
+        "expanded_nodes": 4416,
+        "runtime_seconds": 1.8387808799743652
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            105.5421057,
+            20.99979136,
+            0.0
+          ],
+          [
+            105.52412866,
+            20.99733319,
+            0.0
+          ],
+          [
+            105.52268073,
+            20.99598233,
+            0.0
+          ],
+          [
+            105.51294633,
+            20.99589658,
+            0.0
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_dijkstra",
+  "algorithm": "dijkstra",
+  "success": true,
+  "message": "Path found.",
+  "path_nodes": 57,
+  "total_cost": 56.0,
+  "expanded_nodes": 5196,
+  "visited_nodes": 5196,
+  "runtime_seconds": 0.10463380813598633,
+  "start": {
+    "x": 105.53939267,
+    "y": 20.98356076,
+    "z": 0.0,
+    "label": "DB02"
+  },
+  "end": {
+    "x": 105.56651475,
+    "y": 21.00380188,
+    "z": 0.0,
+    "label": "DK05"
+  },
+  "algorithm_path_distance_m": 3810.2238678989515,
+  "algorithm_path_distance_km": 3.8102238678989515,
+  "algorithm_estimated_traveltime_s": 213.9373060832463,
+  "algorithm_estimated_traveltime_min": 3.5656217680541054,
+  "output_path_distance_m": 3810.2238678989515,
+  "output_path_distance_km": 3.8102238678989515,
+  "output_estimated_traveltime_s": 213.9373060832463,
+  "output_estimated_traveltime_min": 3.5656217680541054
+}

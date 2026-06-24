@@ -1,0 +1,36 @@
+"""
+params/dstar.params
+
+Configuration for src/dstar.py.
+Shared model/graph/flyability settings stay in parameters.py.
+"""
+
+# Maximum number of D* state expansions before giving up.
+# For low-RAM machines, keep this near the common MULTI_PATH limit.
+DSTAR_MAX_EXPANSIONS = 5_000_000
+
+# Print a compact D* diagnostic summary inside main.py output.
+DSTAR_VERBOSE = True
+
+# Stop reverse propagation as soon as the start node becomes CLOSED.
+# True is faster for one start/end route. False computes more of the
+# goal-rooted tree, useful only if you later reuse the same goal for many starts.
+DSTAR_STOP_WHEN_START_CLOSED = True
+
+# Optional dynamic obstacle hook for future re-planning tests.
+# These are model row indices to treat as temporarily blocked in addition to
+# graph["valid_indices"]. Keep empty for the normal static costmap run.
+DSTAR_DYNAMIC_BLOCKED_INDICES = ()
+
+# Return the full expanded node order in result["expanded_order"].
+# Keep False to save memory.
+DSTAR_RETURN_EXPAND_LIST = False
+
+# Max path steps while extracting parent chain.
+# 0 means: len(graph["valid_indices"]) + 2.
+DSTAR_MAX_PATH_STEPS = 0
+
+# Resource flags kept consistent with your common low-RAM settings.
+DSTAR_LOW_MEMORY_MODE = LOW_MEMORY_MODE
+DSTAR_USE_MULTICORE = False
+DSTAR_MAX_WORKERS = 1

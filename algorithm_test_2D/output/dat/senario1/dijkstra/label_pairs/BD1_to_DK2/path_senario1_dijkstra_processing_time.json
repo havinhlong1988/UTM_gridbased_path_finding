@@ -1,0 +1,12 @@
+{
+  "algorithm": "dijkstra",
+  "run_mode": "full",
+  "success": true,
+  "k_paths_requested": 1,
+  "k_paths_found": 1,
+  "expanded_states": 0,
+  "algorithm_search_time_s": 0.14251581000007718,
+  "algorithm_search_time_text": "0.14 s",
+  "processing_time_total_s": 1.77028395599973,
+  "processing_time_total_text": "1.77 s"
+}

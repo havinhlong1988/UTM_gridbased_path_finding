@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_fmmastar",
+  "algorithm": "fmmastar",
+  "success": true,
+  "message": "ok",
+  "path_nodes": 52,
+  "total_cost": 175.2946916313378,
+  "expanded_nodes": null,
+  "visited_nodes": null,
+  "runtime_seconds": null,
+  "start": {
+    "x": 105.5421057,
+    "y": 20.99979136,
+    "z": 0.0,
+    "label": "DB01"
+  },
+  "end": {
+    "x": 105.56651475,
+    "y": 21.00380188,
+    "z": 0.0,
+    "label": "DK05"
+  },
+  "algorithm_path_distance_m": 2759.42094929884,
+  "algorithm_path_distance_km": 2.75942094929884,
+  "algorithm_estimated_traveltime_s": 135.06105558496307,
+  "algorithm_estimated_traveltime_min": 2.2510175930827176,
+  "output_path_distance_m": 2759.42094929884,
+  "output_path_distance_km": 2.75942094929884,
+  "output_estimated_traveltime_s": 135.06105558496307,
+  "output_estimated_traveltime_min": 2.2510175930827176
+}

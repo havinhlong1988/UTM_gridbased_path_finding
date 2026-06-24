@@ -1,0 +1,12 @@
+{
+  "algorithm": "floodfill",
+  "run_mode": "full",
+  "success": true,
+  "k_paths_requested": 1,
+  "k_paths_found": 1,
+  "expanded_states": 6948,
+  "algorithm_search_time_s": 0.11478297200028464,
+  "algorithm_search_time_text": "0.11 s",
+  "processing_time_total_s": 1.6709705470002518,
+  "processing_time_total_text": "1.67 s"
+}

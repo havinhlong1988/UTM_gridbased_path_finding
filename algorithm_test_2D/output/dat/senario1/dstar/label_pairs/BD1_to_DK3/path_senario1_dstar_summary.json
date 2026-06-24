@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_dstar",
+  "algorithm": "dstar",
+  "success": true,
+  "message": "Path found.",
+  "path_nodes": 36,
+  "total_cost": 105.49319050024368,
+  "expanded_nodes": 2446,
+  "visited_nodes": 2558,
+  "runtime_seconds": 0.9655203819274902,
+  "start": {
+    "x": 105.5421057,
+    "y": 20.99979136,
+    "z": 0.0,
+    "label": "DB01"
+  },
+  "end": {
+    "x": 105.52566871,
+    "y": 20.98624537,
+    "z": 0.0,
+    "label": "DK03"
+  },
+  "algorithm_path_distance_m": 2334.5465506366245,
+  "algorithm_path_distance_km": 2.3345465506366243,
+  "algorithm_estimated_traveltime_s": 105.49319050024368,
+  "algorithm_estimated_traveltime_min": 1.758219841670728,
+  "output_path_distance_m": 2334.5465506366245,
+  "output_path_distance_km": 2.3345465506366243,
+  "output_estimated_traveltime_s": 105.49319050024368,
+  "output_estimated_traveltime_min": 1.758219841670728
+}

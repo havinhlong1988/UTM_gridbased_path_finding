@@ -176,7 +176,7 @@ PATH_STATUS_BOX_LOCATION = "upper right"
 # Multiple-path algorithm naming rule:
 #     src/astar_multiple.py -> output folder:
 #     astar/multiple/{MULTIPLE_OUTPUT_VALUE}/
-ALGORITHM = ["floodfill"]
+ALGORITHM = ["astar","dstar","thetastar","fmmastar","dijkstra","floodfill"]
 # ALGORITHM = ["astar", "astar_multiple"]
 
 # If False, continue to the next algorithm if one fails.
@@ -187,8 +187,8 @@ STOP_ON_ALGORITHM_FAILURE = False
 # Start / end nodes
 # ============================================================
 
-START_LABEL = ["BD1"]
-END_LABEL = ["DK2"]
+START_LABEL = ["BD1","BD2"]
+END_LABEL = ["DK1","DK2","DK3","DK4","DK5"]
 
 # Optional endpoint label aliases and shorthand support.
 # This lets BD1 resolve to DB01 and DK3 resolve to DK03 if those are the

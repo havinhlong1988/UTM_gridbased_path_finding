@@ -7,7 +7,7 @@
   "total_cost": 46.0,
   "expanded_nodes": 6339,
   "visited_nodes": 6481,
-  "runtime_seconds": 0.14660000801086426,
+  "runtime_seconds": 0.10455846786499023,
   "start": {
     "x": 105.5421057,
     "y": 20.99979136,

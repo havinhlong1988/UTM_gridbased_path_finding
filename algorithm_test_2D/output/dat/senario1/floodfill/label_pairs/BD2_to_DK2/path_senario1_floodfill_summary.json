@@ -1,0 +1,31 @@
+{
+  "path_name": "path_senario1_floodfill",
+  "algorithm": "floodfill",
+  "success": true,
+  "message": "Path found by flood-fill/BFS.",
+  "path_nodes": 83,
+  "total_cost": 82.0,
+  "expanded_nodes": 7414,
+  "visited_nodes": 7476,
+  "runtime_seconds": 0.11818647384643555,
+  "start": {
+    "x": 105.53939267,
+    "y": 20.98356076,
+    "z": 0.0,
+    "label": "DB02"
+  },
+  "end": {
+    "x": 105.54310305,
+    "y": 21.02092294,
+    "z": 0.0,
+    "label": "DK02"
+  },
+  "algorithm_path_distance_m": 4347.832924527668,
+  "algorithm_path_distance_km": 4.347832924527668,
+  "algorithm_estimated_traveltime_s": 196.16765617096064,
+  "algorithm_estimated_traveltime_min": 3.269460936182677,
+  "output_path_distance_m": 4347.832924527668,
+  "output_path_distance_km": 4.347832924527668,
+  "output_estimated_traveltime_s": 196.16765617096064,
+  "output_estimated_traveltime_min": 3.269460936182677
+}
