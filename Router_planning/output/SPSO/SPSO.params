@@ -1,0 +1,81 @@
+# ======================================================================
+# Node-based SPSO route-planning parameters
+# ======================================================================
+# This file is intentionally independent from the previous algorithm-test
+# project. Put this project folder anywhere and update MODEL_FILE below.
+
+# Input node-based model.
+# Expected columns:
+#   x/lon  y/lat  z  slowness  label  [label_prefix]
+MODEL_FILE = "model/senario1/model_senario1_cost_for_pathfinding.xyz"
+OUTPUT_DIR = "output/SPSO"
+
+# ----------------------------------------------------------------------
+# Labels / route pairs
+# ----------------------------------------------------------------------
+# Prefix style below means all DB* labels will route to all DK* labels.
+# For your uploaded file this gives DB01, DB02 -> DK01 ... DK06.
+START_LABELS = ["DB02"]
+END_LABELS = ["DK02"]
+LABEL_MATCH_MODE = "auto"      # exact | prefix | auto
+ROUTE_PAIRS = []                # Example: [("DB01", "DK03")]
+MAX_ROUTES = 0                  # 0 = run all pairs
+
+# ----------------------------------------------------------------------
+# Node model and no-fly rule
+# ----------------------------------------------------------------------
+COORDINATE_MODE = "auto"        # auto | lonlat | xy
+NOFLY_SLOWNESS_THRESHOLD = 10.0
+NOFLY_THRESHOLD_MODE = "greater_equal"
+FORCE_ENDPOINTS_FLYABLE = True
+ENDPOINT_FORCE_PREFIXES = ["DB", "DK", "BD", "BK", "FLZ"]
+NEAREST_NODE_MAX_DIST_M = 80.0
+SAMPLE_STEP_M = 25.0
+
+# ----------------------------------------------------------------------
+# SPSO controls
+# ----------------------------------------------------------------------
+PATH_DIMENSION = "2d"           # 2d | 3d
+N_WAYPOINTS = 12
+N_POP = 160
+MAX_IT = 120
+SEED = 42
+VERBOSE = True
+PRINT_EVERY = 10
+EARLY_STOP_ITERS = 35
+
+R_MAX_FACTOR = 2.0
+ANGLE_RANGE_DEG = 75.0
+ELEVATION_ANGLE_RANGE_DEG = 20.0
+Z_MIN_M = 0.0
+Z_MAX_M = 0.0
+
+INERTIA_WEIGHT = 1.0
+INERTIA_DAMPING = 0.98
+C1 = 1.5
+C2 = 1.5
+VELOCITY_ALPHA = 0.5
+
+# ----------------------------------------------------------------------
+# Cost weights
+# ----------------------------------------------------------------------
+# total = length + time + no-fly penalty + outside-grid penalty + smoothness
+W_LENGTH = 1.0
+W_TIME = 1.0
+W_NOFLY = 10000000.0
+W_OUTSIDE = 1000000.0
+W_SMOOTH = 25.0
+W_REPEAT_NODE = 100.0
+TURNING_MAX_DEG = 45.0
+CLIMB_MAX_DEG = 45.0
+
+# ----------------------------------------------------------------------
+# Output
+# ----------------------------------------------------------------------
+ROUTE_SUMMARY_CSV = "SPSO_route_summary.csv"
+SAVE_ROUTE_NODE_CSV = True
+SAVE_ROUTE_POINT_CSV = True
+PLOT_ROUTES = True
+PLOT_DPI = 220
+REMOVE_DUPLICATE_NODES = True
+SIMPLIFY_COLLINEAR_NODES = False

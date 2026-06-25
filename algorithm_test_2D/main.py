@@ -1527,6 +1527,12 @@ def run_one_algorithm(
         output_dir = dat_root_dir / algorithm_name
         algorithm_figure_dir = figure_root_dir / algorithm_name
 
+    # Keep one algorithm-level root directory even when label-pair batch mode
+    # later creates per-pair subfolders.  This is useful for overview/setup
+    # figures that should live at the same level as "label_pairs".
+    algorithm_output_root_dir = output_dir
+    algorithm_figure_root_dir = algorithm_figure_dir
+
     # In START_LABEL/END_LABEL list mode, keep every pair in its own folder
     # to avoid overwriting summary CSV, route_ranks, figures, and timing files.
     if pair_run_tag:
@@ -1680,6 +1686,33 @@ def run_one_algorithm(
     )
     input_slowness_side_by_side_file = (
         algorithm_figure_dir / input_slowness_side_by_side_name
+    )
+
+    # Optional algorithm-level overview figure.  In label-pair batch mode this
+    # file is stored at the same level as the label_pairs folder, e.g.
+    #   output/figures/senario1/astar/
+    #       00_algorithm_input_vs_slowness_astar.png
+    #       label_pairs/BD1_to_DK1/...
+    #       label_pairs/BD1_to_DK2/...
+    plot_algorithm_initial_report = bool(
+        get_param("PLOT_ALGORITHM_INITIAL_REPORT", True)
+    )
+    algorithm_initial_report_name = get_param(
+        "ALGORITHM_INITIAL_REPORT_NAME",
+        None,
+    )
+    if _param_is_none_like(algorithm_initial_report_name):
+        algorithm_initial_report_name = f"00_algorithm_input_vs_slowness_{algorithm_name}.png"
+    else:
+        algorithm_initial_report_name = str(algorithm_initial_report_name)
+    algorithm_initial_report_file = (
+        algorithm_figure_root_dir / algorithm_initial_report_name
+    )
+    plot_algorithm_initial_report_with_endpoints = bool(
+        get_param(
+            "PLOT_ALGORITHM_INITIAL_REPORT_WITH_ENDPOINTS",
+            False if pair_run_tag else True,
+        )
     )
 
     plot_slowness_discrete_bounds = get_param(
@@ -2000,6 +2033,43 @@ def run_one_algorithm(
             always_flyable_prefixes=plot_always_flyable_prefixes,
         )
         print(f"      Initiate figure: {initiate_figure_file}")
+
+    # ============================================================
+    # ALGORITHM-LEVEL OVERVIEW. Plot one setup/slowness figure per algorithm
+    # ============================================================
+    if plot_algorithm_initial_report:
+        should_make_algorithm_overview = True
+        if pair_run_tag:
+            # In label-pair batch mode, the overview figure is shared by the
+            # whole algorithm folder.  Create it once and keep it parallel to
+            # the label_pairs directory.
+            should_make_algorithm_overview = not algorithm_initial_report_file.exists()
+
+        if should_make_algorithm_overview:
+            print("[INIT] Plotting algorithm-level overview figure...")
+            try:
+                algorithm_figure_root_dir.mkdir(parents=True, exist_ok=True)
+                overview_start_idx = start_idx if plot_algorithm_initial_report_with_endpoints else None
+                overview_end_idx = end_idx if plot_algorithm_initial_report_with_endpoints else None
+                plot_model_slowness_side_by_side(
+                    model=model,
+                    figure_file=algorithm_initial_report_file,
+                    start_idx=overview_start_idx,
+                    end_idx=overview_end_idx,
+                    max_model_points=plot_max_model_points,
+                    dpi=plot_dpi,
+                    model_alpha=plot_model_alpha,
+                    model_marker_size=plot_model_marker_size,
+                    no_fly_prefixes=plot_no_fly_prefixes,
+                    no_fly_slowness_threshold=plot_no_fly_slowness_threshold,
+                    always_flyable_prefixes=plot_always_flyable_prefixes,
+                    show_flz_overlay=plot_show_flz_overlay,
+                    slowness_discrete_bounds=plot_slowness_discrete_bounds,
+                    cleanup_temp=bool(get_param("RUN_CLEANUP", False)),
+                )
+                print(f"      Algorithm overview figure: {algorithm_initial_report_file}")
+            except Exception as exc:
+                print(f"[WARNING] Could not plot algorithm-level overview figure: {exc}")
 
     # ============================================================
     # SIDE-BY-SIDE. Plot input model and slowness model

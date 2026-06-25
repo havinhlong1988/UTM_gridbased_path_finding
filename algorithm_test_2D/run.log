@@ -1,0 +1,540 @@
+
+[SKIP] Possible DB/DK path connection calculation is disabled.
+       Set RUN_POSSIBLE_PATH_CALCULATION = True in parameters.py to enable it.
+======================================================================
+PATH-FINDING BATCH CONTROLLER
+======================================================================
+Algorithms to run: astar, dstar, thetastar
+Run mode         : full
+======================================================================
+Start/end label list mode: ON
+Endpoint combinations: 1
+  - BD01 -> DK03
+
+######################################################################
+RUN 1/3: astar:BD01_to_DK03
+######################################################################
+======================================================================
+PATH-FINDING MAIN CONTROLLER
+======================================================================
+Model file       : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/model/senario1/model_senario1_cost_for_pathfinding.xyz
+Algorithm module : astar
+Algorithm output : astar
+Label pair run   : BD01 -> DK03
+Data output dir  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03
+Route ranks dir  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/route_ranks
+Pair paths dir   : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/pair_paths
+Figure dir       : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03
+Report figure    : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/path_report_astar_from_BD01_to_DK03.png
+Initiate figure  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/00_initiate_from_['BD01']_to_['DK03'].png
+Side-by-side fig : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/00_input_vs_slowness_from_['BD01']_to_['DK03'].png
+Zoom diagnostic  : True
+Run cleanup      : True
+Run mode         : full
+Flyable rule     : slowness < 10
+No-fly rule      : slowness >= 10
+======================================================================
+[1/6] Loading labelled model...
+      Nodes loaded: 15,449
+      Columns     : ['x', 'y', 'z', 'slowness', 'label', 'label_prefix', 'raw']
+[FLYABILITY] Numeric slowness rule:
+      enabled      : True
+      rule         : slowness greater_equal 10 => no-fly
+      min slowness : 0
+      max slowness : 10
+      flyable nodes: 8,191
+      no-fly nodes : 7,258
+      no-fly by label prefix, top entries:
+        N           : 7,256
+        RA          : 2
+[2/6] Selecting start/end nodes...
+      START_LABEL label resolved: 'BD01' -> 'DB01' (index 15435)
+      Resolved endpoint pair: 'BD01'->'DK03' becomes 'DB01'->'DK03'
+      Start index: 15435
+      End index  : 15439
+      Start node : {'x': 105.5421057, 'y': 20.99979136, 'z': 0.0, 'slowness': 0.0, 'label': 'DB01', 'label_prefix': 'DB', 'raw': '105.54210570 20.99979136 0.00000000 0.00000000 DB01', 'is_no_fly': False, 'is_flyable': True, 'is_no_fly_by_slowness': False, 'is_flyable_by_slowness': True}
+      End node   : {'x': 105.52566871, 'y': 20.98624537, 'z': 0.0, 'slowness': 0.02, 'label': 'DK03', 'label_prefix': 'DK', 'raw': '105.52566871 20.98624537 0.00000000 0.02000000 DK03', 'is_no_fly': False, 'is_flyable': True, 'is_no_fly_by_slowness': False, 'is_flyable_by_slowness': True}
+[3/6] Building graph...
+      Blocking rule:
+        by slowness threshold : True
+        no-fly threshold      : 10
+        threshold mode        : greater_equal
+        label block prefixes  : ('__NOFLY_BY_SLOWNESS__',)
+      Traversable nodes: 8,191
+      Expected flyable : 8,191
+      Grid dimension   : 2D
+      Connectivity     : 8
+      Neighbor mode    : kdtree
+      Grid spacing     : 50.00 m
+      Neighbor radius  : 79.99 m
+      Max neighbors    : 8
+      FORCE_SEARCH_START_END_FLYABLE=True:
+        DB/DK/FLZ or selected endpoints are operationally allowed.
+        Normal grid cells still obey slowness >= 10 as no-fly.
+      Force search start/end as flyable:
+        search start: 15435 | DB01
+        search end  : 15439 | DK03
+      Neighbor diagnostic:
+        search start neighbors: 8
+        search end neighbors  : 7
+      Traversable nodes: 8,191
+      Grid dimension   : 2D
+      Connectivity     : 8
+[4/6] Running algorithm...
+      Algorithm search time:
+        0.96 s
+      Algorithm path nodes       : 35
+      Output path nodes          : 35
+      Total cost                 : 105.37254390466882
+      Path metrics:
+        algorithm distance       : 2324.40 m
+        algorithm distance       : 2.3244 km
+        algorithm traveltime     : 105.37 s
+        algorithm traveltime     : 1.76 min
+        output distance          : 2324.40 m
+        output distance          : 2.3244 km
+        output traveltime        : 105.37 s
+        output traveltime        : 1.76 min
+[5/6] Exporting path footprint files...
+[6/6] Plotting path report...
+[ZOOM] Plotting path-corridor diagnostic...
+      Zoom diagnostic figure: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/path_zoom_astar_from_BD01_to_DK03.png
+[CLEANUP] Removing intermediate files...
+======================================================================
+CLEANUP SUMMARY
+======================================================================
+Mode          : DRY RUN
+Removed files : 0
+Removed dirs  : 134
+Skipped files : 0
+Errors        : 0
+
+Empty dirs removed / would be removed:
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BD2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DB2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BD2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK5/route_ranks
+  ... and 84 more
+======================================================================
+DONE
+======================================================================
+Exported path files:
+  csv                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar.csv
+  xyz                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar.xyz
+  geojson             : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar.geojson
+  kml                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar.kml
+  summary             : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar_summary.json
+  path_steps_csv      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar_path_steps.csv
+  path_steps_xyz      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar_path_steps.xyz
+  path_zoom_figure    : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/path_zoom_astar_from_BD01_to_DK03.png
+  processing_time_json: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar_processing_time.json
+Initiate figure : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/00_initiate_from_['BD01']_to_['DK03'].png
+Report figure   : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/astar/label_pairs/BD01_to_DK03/path_report_astar_from_BD01_to_DK03.png
+Processing time:
+  algorithm search : 0.96 s
+  total workflow   : 2.52 s
+  timing file      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/path_senario1_astar_processing_time.json
+
+######################################################################
+RUN 2/3: dstar:BD01_to_DK03
+######################################################################
+======================================================================
+PATH-FINDING MAIN CONTROLLER
+======================================================================
+Model file       : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/model/senario1/model_senario1_cost_for_pathfinding.xyz
+Algorithm module : dstar
+Algorithm output : dstar
+Label pair run   : BD01 -> DK03
+Data output dir  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03
+Route ranks dir  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/route_ranks
+Pair paths dir   : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/pair_paths
+Figure dir       : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03
+Report figure    : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/path_report_dstar_from_BD01_to_DK03.png
+Initiate figure  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/00_initiate_from_['BD01']_to_['DK03'].png
+Side-by-side fig : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/00_input_vs_slowness_from_['BD01']_to_['DK03'].png
+Zoom diagnostic  : True
+Run cleanup      : True
+Run mode         : full
+Flyable rule     : slowness < 10
+No-fly rule      : slowness >= 10
+======================================================================
+[1/6] Loading labelled model...
+      Nodes loaded: 15,449
+      Columns     : ['x', 'y', 'z', 'slowness', 'label', 'label_prefix', 'raw']
+[FLYABILITY] Numeric slowness rule:
+      enabled      : True
+      rule         : slowness greater_equal 10 => no-fly
+      min slowness : 0
+      max slowness : 10
+      flyable nodes: 8,191
+      no-fly nodes : 7,258
+      no-fly by label prefix, top entries:
+        N           : 7,256
+        RA          : 2
+[2/6] Selecting start/end nodes...
+      START_LABEL label resolved: 'BD01' -> 'DB01' (index 15435)
+      Resolved endpoint pair: 'BD01'->'DK03' becomes 'DB01'->'DK03'
+      Start index: 15435
+      End index  : 15439
+      Start node : {'x': 105.5421057, 'y': 20.99979136, 'z': 0.0, 'slowness': 0.0, 'label': 'DB01', 'label_prefix': 'DB', 'raw': '105.54210570 20.99979136 0.00000000 0.00000000 DB01', 'is_no_fly': False, 'is_flyable': True, 'is_no_fly_by_slowness': False, 'is_flyable_by_slowness': True}
+      End node   : {'x': 105.52566871, 'y': 20.98624537, 'z': 0.0, 'slowness': 0.02, 'label': 'DK03', 'label_prefix': 'DK', 'raw': '105.52566871 20.98624537 0.00000000 0.02000000 DK03', 'is_no_fly': False, 'is_flyable': True, 'is_no_fly_by_slowness': False, 'is_flyable_by_slowness': True}
+[3/6] Building graph...
+      Blocking rule:
+        by slowness threshold : True
+        no-fly threshold      : 10
+        threshold mode        : greater_equal
+        label block prefixes  : ('__NOFLY_BY_SLOWNESS__',)
+      Traversable nodes: 8,191
+      Expected flyable : 8,191
+      Grid dimension   : 2D
+      Connectivity     : 8
+      Neighbor mode    : kdtree
+      Grid spacing     : 50.00 m
+      Neighbor radius  : 79.99 m
+      Max neighbors    : 8
+      FORCE_SEARCH_START_END_FLYABLE=True:
+        DB/DK/FLZ or selected endpoints are operationally allowed.
+        Normal grid cells still obey slowness >= 10 as no-fly.
+      Force search start/end as flyable:
+        search start: 15435 | DB01
+        search end  : 15439 | DK03
+      Neighbor diagnostic:
+        search start neighbors: 8
+        search end neighbors  : 7
+      Traversable nodes: 8,191
+      Grid dimension   : 2D
+      Connectivity     : 8
+[4/6] Running algorithm...
+      D* summary:
+        expanded nodes        : 2,446
+        reached states        : 2,558
+        dynamic blocked nodes : 0
+        path nodes            : 36
+        path cost             : 105.49319
+      Algorithm search time:
+        0.89 s
+      Algorithm path nodes       : 36
+      Output path nodes          : 36
+      Total cost                 : 105.49319050024368
+      Path metrics:
+        algorithm distance       : 2334.55 m
+        algorithm distance       : 2.3345 km
+        algorithm traveltime     : 105.49 s
+        algorithm traveltime     : 1.76 min
+        output distance          : 2334.55 m
+        output distance          : 2.3345 km
+        output traveltime        : 105.49 s
+        output traveltime        : 1.76 min
+[5/6] Exporting path footprint files...
+[6/6] Plotting path report...
+[ZOOM] Plotting path-corridor diagnostic...
+      Zoom diagnostic figure: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/path_zoom_dstar_from_BD01_to_DK03.png
+[CLEANUP] Removing intermediate files...
+======================================================================
+CLEANUP SUMMARY
+======================================================================
+Mode          : DRY RUN
+Removed files : 0
+Removed dirs  : 135
+Skipped files : 0
+Errors        : 0
+
+Empty dirs removed / would be removed:
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BD2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DB2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BD2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_DK3/route_ranks
+  ... and 85 more
+======================================================================
+DONE
+======================================================================
+Exported path files:
+  csv                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar.csv
+  xyz                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar.xyz
+  geojson             : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar.geojson
+  kml                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar.kml
+  summary             : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar_summary.json
+  path_steps_csv      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar_path_steps.csv
+  path_steps_xyz      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar_path_steps.xyz
+  path_zoom_figure    : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/path_zoom_dstar_from_BD01_to_DK03.png
+  processing_time_json: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar_processing_time.json
+Initiate figure : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/00_initiate_from_['BD01']_to_['DK03'].png
+Report figure   : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/dstar/label_pairs/BD01_to_DK03/path_report_dstar_from_BD01_to_DK03.png
+Processing time:
+  algorithm search : 0.89 s
+  total workflow   : 2.40 s
+  timing file      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/path_senario1_dstar_processing_time.json
+
+######################################################################
+RUN 3/3: thetastar:BD01_to_DK03
+######################################################################
+======================================================================
+PATH-FINDING MAIN CONTROLLER
+======================================================================
+Model file       : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/model/senario1/model_senario1_cost_for_pathfinding.xyz
+Algorithm module : thetastar
+Algorithm output : thetastar
+Label pair run   : BD01 -> DK03
+Data output dir  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03
+Route ranks dir  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/route_ranks
+Pair paths dir   : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/pair_paths
+Figure dir       : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03
+Report figure    : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/path_report_thetastar_from_BD01_to_DK03.png
+Initiate figure  : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/00_initiate_from_['BD01']_to_['DK03'].png
+Side-by-side fig : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/00_input_vs_slowness_from_['BD01']_to_['DK03'].png
+Zoom diagnostic  : True
+Run cleanup      : True
+Run mode         : full
+Flyable rule     : slowness < 10
+No-fly rule      : slowness >= 10
+======================================================================
+[1/6] Loading labelled model...
+      Nodes loaded: 15,449
+      Columns     : ['x', 'y', 'z', 'slowness', 'label', 'label_prefix', 'raw']
+[FLYABILITY] Numeric slowness rule:
+      enabled      : True
+      rule         : slowness greater_equal 10 => no-fly
+      min slowness : 0
+      max slowness : 10
+      flyable nodes: 8,191
+      no-fly nodes : 7,258
+      no-fly by label prefix, top entries:
+        N           : 7,256
+        RA          : 2
+[2/6] Selecting start/end nodes...
+      START_LABEL label resolved: 'BD01' -> 'DB01' (index 15435)
+      Resolved endpoint pair: 'BD01'->'DK03' becomes 'DB01'->'DK03'
+      Start index: 15435
+      End index  : 15439
+      Start node : {'x': 105.5421057, 'y': 20.99979136, 'z': 0.0, 'slowness': 0.0, 'label': 'DB01', 'label_prefix': 'DB', 'raw': '105.54210570 20.99979136 0.00000000 0.00000000 DB01', 'is_no_fly': False, 'is_flyable': True, 'is_no_fly_by_slowness': False, 'is_flyable_by_slowness': True}
+      End node   : {'x': 105.52566871, 'y': 20.98624537, 'z': 0.0, 'slowness': 0.02, 'label': 'DK03', 'label_prefix': 'DK', 'raw': '105.52566871 20.98624537 0.00000000 0.02000000 DK03', 'is_no_fly': False, 'is_flyable': True, 'is_no_fly_by_slowness': False, 'is_flyable_by_slowness': True}
+[3/6] Building graph...
+      Blocking rule:
+        by slowness threshold : True
+        no-fly threshold      : 10
+        threshold mode        : greater_equal
+        label block prefixes  : ('__NOFLY_BY_SLOWNESS__',)
+      Traversable nodes: 8,191
+      Expected flyable : 8,191
+      Grid dimension   : 2D
+      Connectivity     : 8
+      Neighbor mode    : kdtree
+      Grid spacing     : 50.00 m
+      Neighbor radius  : 79.99 m
+      Max neighbors    : 8
+      FORCE_SEARCH_START_END_FLYABLE=True:
+        DB/DK/FLZ or selected endpoints are operationally allowed.
+        Normal grid cells still obey slowness >= 10 as no-fly.
+      Force search start/end as flyable:
+        search start: 15435 | DB01
+        search end  : 15439 | DK03
+      Neighbor diagnostic:
+        search start neighbors: 8
+        search end neighbors  : 7
+      Traversable nodes: 8,191
+      Grid dimension   : 2D
+      Connectivity     : 8
+[4/6] Running algorithm...
+[thetastar] A* -> LOS smoothing: raw=35, smoothed=2, export=2, LOS checks=1, LOS shortcuts=1, method=point_clearance, bresenham_clearance=0, point_clearance_m=35.0
+      Algorithm search time:
+        1.17 s
+      Algorithm path nodes       : 2
+      Output path nodes          : 2
+      Total cost                 : 105.37254390466882
+      Path metrics:
+        algorithm distance       : 2278.54 m
+        algorithm distance       : 2.2785 km
+        algorithm traveltime     : 45.57 s
+        algorithm traveltime     : 0.76 min
+        output distance          : 2278.54 m
+        output distance          : 2.2785 km
+        output traveltime        : 45.57 s
+        output traveltime        : 0.76 min
+[5/6] Exporting path footprint files...
+[6/6] Plotting path report...
+[ZOOM] Plotting path-corridor diagnostic...
+      Zoom diagnostic figure: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/path_zoom_thetastar_from_BD01_to_DK03.png
+[CLEANUP] Removing intermediate files...
+======================================================================
+CLEANUP SUMMARY
+======================================================================
+Mode          : DRY RUN
+Removed files : 0
+Removed dirs  : 136
+Skipped files : 0
+Errors        : 0
+
+Empty dirs removed / would be removed:
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/FMM2D/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BD2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD01_to_DK03/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD1_to_DB2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/astar/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK5/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BD2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD01_to_DK03/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD1_to_BK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/dstar/label_pairs/BD2_to_DK2/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK3/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD1_to_DK4/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_BD1/route_ranks
+  /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/fmmastar/label_pairs/BD2_to_DK3/route_ranks
+  ... and 86 more
+======================================================================
+DONE
+======================================================================
+Exported path files:
+  csv                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar.csv
+  xyz                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar.xyz
+  geojson             : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar.geojson
+  kml                 : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar.kml
+  summary             : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar_summary.json
+  path_steps_csv      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar_path_steps.csv
+  path_steps_xyz      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar_path_steps.xyz
+  path_zoom_figure    : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/path_zoom_thetastar_from_BD01_to_DK03.png
+  processing_time_json: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar_processing_time.json
+Initiate figure : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/00_initiate_from_['BD01']_to_['DK03'].png
+Report figure   : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/figures/senario1/thetastar/label_pairs/BD01_to_DK03/path_report_thetastar_from_BD01_to_DK03.png
+Processing time:
+  algorithm search : 1.17 s
+  total workflow   : 2.60 s
+  timing file      : /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/algorithm_test_2D/output/dat/senario1/thetastar/label_pairs/BD01_to_DK03/path_senario1_thetastar_processing_time.json
+
+======================================================================
+BATCH DONE
+======================================================================
+Algorithms requested: astar, dstar, thetastar
+All algorithms completed successfully.
+Processing time summary:
+  astar:BD01_to_DK03  : total=2.52 s, search=0.96 s
+  dstar:BD01_to_DK03  : total=2.40 s, search=0.89 s
+  thetastar:BD01_to_DK03: total=2.60 s, search=1.17 s
+  batch total         : 7.52 s

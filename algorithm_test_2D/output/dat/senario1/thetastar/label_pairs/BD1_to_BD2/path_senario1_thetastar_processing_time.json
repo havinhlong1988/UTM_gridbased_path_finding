@@ -1,0 +1,12 @@
+{
+  "algorithm": "thetastar",
+  "run_mode": "full",
+  "success": true,
+  "k_paths_requested": 1,
+  "k_paths_found": 1,
+  "expanded_states": 864,
+  "algorithm_search_time_s": 0.5234525180021592,
+  "algorithm_search_time_text": "0.52 s",
+  "processing_time_total_s": 1.901355550999142,
+  "processing_time_total_text": "1.90 s"
+}

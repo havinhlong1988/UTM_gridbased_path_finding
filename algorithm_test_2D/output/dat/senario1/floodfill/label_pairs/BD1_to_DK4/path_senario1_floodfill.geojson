@@ -10,7 +10,7 @@
         "total_cost": 60.0,
         "path_nodes": 61,
         "expanded_nodes": 7963,
-        "runtime_seconds": 0.13517093658447266
+        "runtime_seconds": 0.12295818328857422
       },
       "geometry": {
         "type": "LineString",

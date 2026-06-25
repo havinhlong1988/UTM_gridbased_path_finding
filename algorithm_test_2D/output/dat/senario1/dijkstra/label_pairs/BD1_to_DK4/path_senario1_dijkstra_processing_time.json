@@ -5,8 +5,8 @@
   "k_paths_requested": 1,
   "k_paths_found": 1,
   "expanded_states": 0,
-  "algorithm_search_time_s": 0.16357908100053464,
-  "algorithm_search_time_text": "0.16 s",
-  "processing_time_total_s": 1.894526281999788,
-  "processing_time_total_text": "1.89 s"
+  "algorithm_search_time_s": 0.15049128600003314,
+  "algorithm_search_time_text": "0.15 s",
+  "processing_time_total_s": 1.7700563580001472,
+  "processing_time_total_text": "1.77 s"
 }

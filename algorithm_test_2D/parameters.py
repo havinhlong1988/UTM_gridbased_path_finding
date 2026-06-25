@@ -176,7 +176,7 @@ PATH_STATUS_BOX_LOCATION = "upper right"
 # Multiple-path algorithm naming rule:
 #     src/astar_multiple.py -> output folder:
 #     astar/multiple/{MULTIPLE_OUTPUT_VALUE}/
-ALGORITHM = ["astar","dstar","thetastar","fmmastar","dijkstra","floodfill"]
+ALGORITHM = ["astar", "dstar", "thetastar"]
 # ALGORITHM = ["astar", "astar_multiple"]
 
 # If False, continue to the next algorithm if one fails.
@@ -187,8 +187,8 @@ STOP_ON_ALGORITHM_FAILURE = False
 # Start / end nodes
 # ============================================================
 
-START_LABEL = ["BD1","BD2"]
-END_LABEL = ["DK1","DK2","DK3","DK4","DK5"]
+START_LABEL = ["BD01"]
+END_LABEL = ["DK03"]
 
 # Optional endpoint label aliases and shorthand support.
 # This lets BD1 resolve to DB01 and DK3 resolve to DK03 if those are the
@@ -458,6 +458,18 @@ PLOT_REPORT_TEXT_BOX = True
 PLOT_INITIATE_FIGURE = False
 INITIATE_FIGURE_NAME = f"00_initiate_from_{START_LABEL}_to_{END_LABEL}.png"
 
+# One algorithm-level overview figure, stored in the algorithm figure root.
+# Example in label-pair batch mode:
+#   output/figures/senario1/dstar/
+#       00_algorithm_input_vs_slowness_dstar.png
+#       label_pairs/BD1_to_DK1/...
+#       label_pairs/BD1_to_DK2/...
+PLOT_ALGORITHM_INITIAL_REPORT = True
+ALGORITHM_INITIAL_REPORT_NAME = None
+# In label-pair batch mode, False avoids repeatedly changing the shared figure
+# to different start/end pairs. The overview then shows only the setup region
+# and slowness map.
+PLOT_ALGORITHM_INITIAL_REPORT_WITH_ENDPOINTS = False
 
 # ----------------------------
 # Model flyable/no-fly plotting
