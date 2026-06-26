@@ -1,0 +1,99 @@
+OPENCELLID LAYER AVAILABILITY SUMMARY
+======================================
+
+Layer        : all_cells
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : communication support / communication risk input
+Value field  : radio, range_m, samples, average_signal_dbm
+Note         : Cell observations/estimated tower positions; not a direct coverage raster.
+
+Layer        : radio_GSM
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : radio-specific communication support layer
+Value field  : average_signal_dbm or samples
+Note         : No GSM cells found inside Hoa Lac polygon.
+
+Layer        : radio_UMTS
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : radio-specific communication support layer
+Value field  : average_signal_dbm or samples
+Note         : No UMTS cells found inside Hoa Lac polygon.
+
+Layer        : radio_LTE
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : radio-specific communication support layer
+Value field  : average_signal_dbm or samples
+Note         : No LTE cells found inside Hoa Lac polygon.
+
+Layer        : radio_NR
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : radio-specific communication support layer
+Value field  : average_signal_dbm or samples
+Note         : No NR cells found inside Hoa Lac polygon.
+
+Layer        : radio_NBIOT
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : radio-specific communication support layer
+Value field  : average_signal_dbm or samples
+Note         : No NBIOT cells found inside Hoa Lac polygon.
+
+Layer        : radio_CDMA
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : radio-specific communication support layer
+Value field  : average_signal_dbm or samples
+Note         : No CDMA cells found inside Hoa Lac polygon.
+
+Layer        : average_signal_dbm
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : communication quality weighting if values are real dBm
+Value field  : average_signal_dbm
+Note         : OpenCelliD averageSignal can be missing or 0; verify before treating as measured signal strength.
+
+Layer        : range_m
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : approximate coverage radius / search buffer
+Value field  : range_m
+Note         : Range is an estimate, not guaranteed cellular service radius; script caps it for modeling.
+
+Layer        : samples
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : confidence weight
+Value field  : samples
+Note         : Higher sample count means stronger confidence in the cell position estimate.
+
+Layer        : range_coverage_circles
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : rough communication coverage support, not hard obstacle
+Value field  : range_for_plot_m
+Note         : Generated from OpenCelliD range_m; clipped to Hoa Lac polygon.
+
+Layer        : communication_support_grid
+Count        : 0
+Status       : missing_or_empty
+Use now      : no
+Voxel role   : soft cost/risk input for UAV pathfinding
+Value field  : support, risk
+Note         : Estimated from distance, radio type, samples, range, and average signal where available.
+

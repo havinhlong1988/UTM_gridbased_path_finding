@@ -1,0 +1,55 @@
+layer_name,status,source,destination,size_bytes,size_human,voxel_role
+metadata_aoi,copied,metadata/study_area_aoi.gpkg,metadata/study_area_aoi.gpkg,98304,96.0 KB,AOI / clipping boundary
+metadata_aoi,copied,metadata/study_area_aoi.geojson,metadata/study_area_aoi.geojson,500,500.0 B,AOI / clipping boundary
+metadata_aoi,copied,globalbuildingatlas_lod1/metadata/hoalac_polygon.gpkg,metadata/hoalac_polygon.gpkg,98304,96.0 KB,AOI / clipping boundary
+metadata_aoi,copied,opencellid/hoalac_polygon.gpkg,metadata/opencellid__hoalac_polygon.gpkg,98304,96.0 KB,AOI / clipping boundary
+metadata_aoi,copied,openinframap/hoalac_polygon.gpkg,metadata/openinframap__hoalac_polygon.gpkg,98304,96.0 KB,AOI / clipping boundary
+metadata_aoi,copied,opentopography/hoalac_polygon.gpkg,metadata/opentopography__hoalac_polygon.gpkg,98304,96.0 KB,AOI / clipping boundary
+metadata_aoi,copied,osm/hoalac_polygon.gpkg,metadata/osm__hoalac_polygon.gpkg,98304,96.0 KB,AOI / clipping boundary
+osm_powerlines_agl,copied,osm/powerlines_hoalac_clipped.gpkg,osm/powerlines/powerlines_hoalac_clipped.gpkg,98304,96.0 KB,hard linear obstacle; use z_min_agl_m / z_max_agl_m if present
+osm_powerlines_agl,copied,osm/powerlines_vertices_hoalac.xyz,osm/powerlines/powerlines_vertices_hoalac.xyz,2814,2.7 KB,hard linear obstacle; use z_min_agl_m / z_max_agl_m if present
+osm_powerlines_agl,copied,openinframap/hoalac_clipped_layers/power_lines_hoalac.gpkg,osm/powerlines/power_lines_hoalac.gpkg,106496,104.0 KB,hard linear obstacle; use z_min_agl_m / z_max_agl_m if present
+osm_powerlines_agl,copied,openinframap/xyz/power_lines_hoalac.xyz,osm/powerlines/power_lines_hoalac.xyz,5336,5.2 KB,hard linear obstacle; use z_min_agl_m / z_max_agl_m if present
+osm_power_poles_towers_agl,copied,osm/power_towers_poles_hoalac_clipped.gpkg,osm/power_poles_towers/power_towers_poles_hoalac_clipped.gpkg,98304,96.0 KB,hard point/vertical obstacle; use height_m / z_max_agl_m if present
+osm_power_poles_towers_agl,copied,osm/power_towers_poles_points_hoalac.xyz,osm/power_poles_towers/power_towers_poles_points_hoalac.xyz,2000,2.0 KB,hard point/vertical obstacle; use height_m / z_max_agl_m if present
+osm_power_poles_towers_agl,copied,openinframap/hoalac_clipped_layers/power_supports_hoalac.gpkg,osm/power_poles_towers/power_supports_hoalac.gpkg,106496,104.0 KB,hard point/vertical obstacle; use height_m / z_max_agl_m if present
+osm_power_poles_towers_agl,copied,openinframap/xyz/power_supports_hoalac.xyz,osm/power_poles_towers/power_supports_hoalac.xyz,1924,1.9 KB,hard point/vertical obstacle; use height_m / z_max_agl_m if present
+osm_road_centerline,copied,osm/roads_hoalac_clipped.gpkg,osm/roads/roads_hoalac_clipped.gpkg,581632,568.0 KB,road centerline / soft risk / road-crossing reference
+osm_road_centerline,copied,osm/roads_vertices_hoalac.xyz,osm/roads/roads_vertices_hoalac.xyz,384122,375.1 KB,road centerline / soft risk / road-crossing reference
+osm_road_centerline,copied,osm/roads_points_hoalac.xyz,osm/roads/roads_points_hoalac.xyz,358658,350.3 KB,road centerline / soft risk / road-crossing reference
+osm_road_centerline,copied,osm/roads_points_hoalac.csv,osm/roads/roads_points_hoalac.csv,607118,592.9 KB,road centerline / soft risk / road-crossing reference
+osm_traffic_lights_agl,copied,osm/traffic_lights_hoalac_clipped.gpkg,osm/traffic_lights/traffic_lights_hoalac_clipped.gpkg,98304,96.0 KB,low-altitude point obstacle near landing/takeoff; use height_m if present
+osm_traffic_lights_agl,copied,osm/traffic_lights_points_hoalac.xyz,osm/traffic_lights/traffic_lights_points_hoalac.xyz,156,156.0 B,low-altitude point obstacle near landing/takeoff; use height_m if present
+osm_street_lamps_agl_optional,copied,osm/street_lamps_hoalac_clipped.gpkg,osm/street_lamps/street_lamps_hoalac_clipped.gpkg,98304,96.0 KB,optional low-altitude point obstacle; use height_m if present
+osm_street_lamps_agl_optional,copied,osm/street_lamps_points_hoalac.xyz,osm/street_lamps/street_lamps_points_hoalac.xyz,0,0.0 B,optional low-altitude point obstacle; use height_m if present
+gba_building_footprint_height,copied,globalbuildingatlas_lod1/metadata/hoalac_polygon.gpkg,gba/hoalac_polygon.gpkg,98304,96.0 KB,hard polygon obstacle; building footprint + building height
+gba_building_footprint_height,copied,globalbuildingatlas_lod1/processed/gba_lod1_buildings_hoalac_clipped.gpkg,gba/gba_lod1_buildings_hoalac_clipped.gpkg,4599808,4.4 MB,hard polygon obstacle; building footprint + building height
+gba_building_footprint_height,copied,globalbuildingatlas_lod1/processed/gba_lod1_buildings_centroid_hoalac.xyz,gba/gba_lod1_buildings_centroid_hoalac.xyz,536196,523.6 KB,hard polygon obstacle; building footprint + building height
+gba_building_footprint_height,copied,globalbuildingatlas_lod1/processed/gba_lod1_buildings_centroid_hoalac_with_info.xyz,gba/gba_lod1_buildings_centroid_hoalac_with_info.xyz,1086927,1.0 MB,hard polygon obstacle; building footprint + building height
+gba_building_footprint_height,copied,globalbuildingatlas_lod1/processed/gba_lod1_buildings_vertices_hoalac.xyz,gba/gba_lod1_buildings_vertices_hoalac.xyz,6064830,5.8 MB,hard polygon obstacle; building footprint + building height
+opencellid_communication_soft_risk,copied,opencellid/opencellid_cells_hoalac.gpkg,opencellid/opencellid_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/opencellid_cells_hoalac.csv,opencellid/opencellid_cells_hoalac.csv,113,113.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/opencellid_range_circles_hoalac.gpkg,opencellid/opencellid_range_circles_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/communication_support_grid_hoalac.gpkg,opencellid/communication_support_grid_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/communication_support_grid_hoalac.csv,opencellid/communication_support_grid_hoalac.csv,22,22.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/communication_risk_grid_hoalac.xyz,opencellid/communication_risk_grid_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/communication_support_grid_hoalac.xyz,opencellid/communication_support_grid_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_cdma_cells_hoalac.xyz,opencellid/opencellid_cdma_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_cells_hoalac.xyz,opencellid/opencellid_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_gsm_cells_hoalac.xyz,opencellid/opencellid_gsm_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_lte_cells_hoalac.xyz,opencellid/opencellid_lte_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_nbiot_cells_hoalac.xyz,opencellid/opencellid_nbiot_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_nr_cells_hoalac.xyz,opencellid/opencellid_nr_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_umts_cells_hoalac.xyz,opencellid/opencellid_umts_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/xyz/opencellid_unknown_cells_hoalac.xyz,opencellid/opencellid_unknown_cells_hoalac.xyz,0,0.0 B,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_cdma_cells_hoalac.gpkg,opencellid/opencellid_cdma_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_gsm_cells_hoalac.gpkg,opencellid/opencellid_gsm_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_lte_cells_hoalac.gpkg,opencellid/opencellid_lte_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_nbiot_cells_hoalac.gpkg,opencellid/opencellid_nbiot_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_nr_cells_hoalac.gpkg,opencellid/opencellid_nr_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_umts_cells_hoalac.gpkg,opencellid/opencellid_umts_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/layers/opencellid_unknown_cells_hoalac.gpkg,opencellid/opencellid_unknown_cells_hoalac.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+opencellid_communication_soft_risk,copied,opencellid/hoalac_polygon.gpkg,opencellid/hoalac_polygon.gpkg,98304,96.0 KB,soft communication risk/support; not a hard obstacle
+otp_dem_elevation,copied,opentopography/clipped_tif/COP30_hoalac_clipped.tif,opentopography/COP30_hoalac_clipped.tif,138321,135.1 KB,terrain/elevation base for AGL calculation
+otp_dem_elevation,copied,opentopography/derived_tif/COP30_elevation_m.tif,opentopography/COP30_elevation_m.tif,138321,135.1 KB,terrain/elevation base for AGL calculation
+otp_dem_elevation,copied,opentopography/xyz/COP30_elevation_hoalac.xyz,opentopography/COP30_elevation_hoalac.xyz,1169273,1.1 MB,terrain/elevation base for AGL calculation

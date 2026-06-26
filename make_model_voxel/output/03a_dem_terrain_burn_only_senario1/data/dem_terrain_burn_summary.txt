@@ -1,0 +1,40 @@
+DEM-ONLY TERRAIN BURN SUMMARY
+======================================================================
+Base model dir             : output/02_base_3d_voxel_box_model_senario1/data
+Input data dir             : input/data_senario1
+Terrain source             : input/data_senario1/opentopography/COP30_elevation_m.tif
+Vertical reference         : MSL
+SW reference UTM X         : 552250.000 m
+SW reference UTM Y         : 2320100.000 m
+Voxel size                 : 50 x 50 x 5 m
+Terrain burn rule          : z_bottom_below_dem
+Terrain clearance buffer   : 0 m
+Flyable slowness           : 0.3 s/m
+No-fly slowness            : 10 s/m
+Total voxels               : 414,518
+Input/base no-fly voxels    : 121,394
+Outside-polygon no-fly     : 121,394
+DEM-burned voxels          : 61,096
+Final flyable voxels       : 250,700
+Final no-fly voxels        : 163,818
+
+DEM sampled terrain statistics:
+  raw_min                     : 4.458774566650391
+  raw_max                     : 104.17967987060547
+  sample_min_before_fill      : 4.458774566650391
+  sample_max_before_fill      : 104.17967987060547
+  final_sample_p50            : 15.484016418457031
+  final_sample_p99            : 36.19113868713379
+  final_sample_max            : 104.17967987060547
+
+DEM burn equation:
+  terrain_msl = DEM(x, y)
+  burn_dem_terrain = z_bottom_msl < terrain_msl + clearance_buffer
+  burn_outside_polygon = inside_polygon != 1
+  final_nofly_dem_only = base_nofly OR burn_outside_polygon OR burn_dem_terrain
+  z_agl = z_msl - terrain_msl
+
+Plot coordinate equation:
+  x_from_sw_m = x_utm_m - x_sw_corner_utm_m
+  y_from_sw_m = y_utm_m - y_sw_corner_utm_m
+  distance_from_sw_m = sqrt(x_from_sw_m^2 + y_from_sw_m^2)

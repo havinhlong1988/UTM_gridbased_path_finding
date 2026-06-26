@@ -1,0 +1,13 @@
+layer,feature_count,status,use_now,voxel_role,value_field,note
+all_cells,0,missing_or_empty,no,communication support / communication risk input,"radio, range_m, samples, average_signal_dbm",Cell observations/estimated tower positions; not a direct coverage raster.
+radio_GSM,0,missing_or_empty,no,radio-specific communication support layer,average_signal_dbm or samples,No GSM cells found inside Hoa Lac polygon.
+radio_UMTS,0,missing_or_empty,no,radio-specific communication support layer,average_signal_dbm or samples,No UMTS cells found inside Hoa Lac polygon.
+radio_LTE,0,missing_or_empty,no,radio-specific communication support layer,average_signal_dbm or samples,No LTE cells found inside Hoa Lac polygon.
+radio_NR,0,missing_or_empty,no,radio-specific communication support layer,average_signal_dbm or samples,No NR cells found inside Hoa Lac polygon.
+radio_NBIOT,0,missing_or_empty,no,radio-specific communication support layer,average_signal_dbm or samples,No NBIOT cells found inside Hoa Lac polygon.
+radio_CDMA,0,missing_or_empty,no,radio-specific communication support layer,average_signal_dbm or samples,No CDMA cells found inside Hoa Lac polygon.
+average_signal_dbm,0,missing_or_empty,no,communication quality weighting if values are real dBm,average_signal_dbm,OpenCelliD averageSignal can be missing or 0; verify before treating as measured signal strength.
+range_m,0,missing_or_empty,no,approximate coverage radius / search buffer,range_m,"Range is an estimate, not guaranteed cellular service radius; script caps it for modeling."
+samples,0,missing_or_empty,no,confidence weight,samples,Higher sample count means stronger confidence in the cell position estimate.
+range_coverage_circles,0,missing_or_empty,no,"rough communication coverage support, not hard obstacle",range_for_plot_m,Generated from OpenCelliD range_m; clipped to Hoa Lac polygon.
+communication_support_grid,0,missing_or_empty,no,soft cost/risk input for UAV pathfinding,"support, risk","Estimated from distance, radio type, samples, range, and average signal where available."

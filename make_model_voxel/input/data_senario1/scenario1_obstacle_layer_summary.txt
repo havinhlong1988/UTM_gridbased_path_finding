@@ -1,0 +1,170 @@
+SCENARIO-1 OBSTACLE INPUT LAYER SUMMARY
+=======================================
+Source: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/downloaddata/output/01_HoaLac_studies_area
+Destination: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/make_model_voxel/input/data_senario1
+Figures: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/make_model_voxel/input/data_senario1/figures
+Time: 2026-06-26T13:39:42
+
+Layer: metadata_aoi
+  Status      : available
+  Required    : False
+  Files       : 7
+  Size        : 576.5 KB
+  Role        : AOI / clipping boundary
+  Height cols : 
+  Destination : metadata
+  Note        : Study-area polygon and metadata used for checking extent and clipping.
+  Copied files:
+    - metadata/study_area_aoi.gpkg
+    - metadata/study_area_aoi.geojson
+    - metadata/hoalac_polygon.gpkg
+    - metadata/opencellid__hoalac_polygon.gpkg
+    - metadata/openinframap__hoalac_polygon.gpkg
+    - metadata/opentopography__hoalac_polygon.gpkg
+    - metadata/osm__hoalac_polygon.gpkg
+
+Layer: osm_powerlines_agl
+  Status      : available
+  Required    : True
+  Files       : 4
+  Size        : 208.0 KB
+  Role        : hard linear obstacle; use z_min_agl_m / z_max_agl_m if present
+  Height cols : height_m;height_source;z_max_agl_m;z_min_agl_m
+  Destination : osm/powerlines
+  Note        : Power line/cable geometry. Height is often assumed, so check AGL columns before using.
+  Copied files:
+    - osm/powerlines/powerlines_hoalac_clipped.gpkg
+    - osm/powerlines/powerlines_vertices_hoalac.xyz
+    - osm/powerlines/power_lines_hoalac.gpkg
+    - osm/powerlines/power_lines_hoalac.xyz
+
+Layer: osm_power_poles_towers_agl
+  Status      : available
+  Required    : True
+  Files       : 4
+  Size        : 203.8 KB
+  Role        : hard point/vertical obstacle; use height_m / z_max_agl_m if present
+  Height cols : height;height_m;height_source;z_max_agl_m;z_min_agl_m
+  Destination : osm/power_poles_towers
+  Note        : Power poles and towers. If no true height exists, use assumed height with low confidence.
+  Copied files:
+    - osm/power_poles_towers/power_towers_poles_hoalac_clipped.gpkg
+    - osm/power_poles_towers/power_towers_poles_points_hoalac.xyz
+    - osm/power_poles_towers/power_supports_hoalac.gpkg
+    - osm/power_poles_towers/power_supports_hoalac.xyz
+
+Layer: osm_road_centerline
+  Status      : available
+  Required    : True
+  Files       : 4
+  Size        : 1.8 MB
+  Role        : road centerline / soft risk / road-crossing reference
+  Height cols : maxheight
+  Destination : osm/roads
+  Note        : Roads are usually not hard aerial obstacles, but useful for population/traffic/road-crossing risk.
+  Copied files:
+    - osm/roads/roads_hoalac_clipped.gpkg
+    - osm/roads/roads_vertices_hoalac.xyz
+    - osm/roads/roads_points_hoalac.xyz
+    - osm/roads/roads_points_hoalac.csv
+
+Layer: osm_traffic_lights_agl
+  Status      : available
+  Required    : True
+  Files       : 2
+  Size        : 96.2 KB
+  Role        : low-altitude point obstacle near landing/takeoff; use height_m if present
+  Height cols : height_m
+  Destination : osm/traffic_lights
+  Note        : Traffic lights are important mostly for low-altitude landing/takeoff corridors.
+  Copied files:
+    - osm/traffic_lights/traffic_lights_hoalac_clipped.gpkg
+    - osm/traffic_lights/traffic_lights_points_hoalac.xyz
+
+Layer: osm_street_lamps_agl_optional
+  Status      : available
+  Required    : False
+  Files       : 2
+  Size        : 96.0 KB
+  Role        : optional low-altitude point obstacle; use height_m if present
+  Height cols : height_m
+  Destination : osm/street_lamps
+  Note        : Street lamps are optional but useful around takeoff/landing corridors if downloaded.
+  Copied files:
+    - osm/street_lamps/street_lamps_hoalac_clipped.gpkg
+    - osm/street_lamps/street_lamps_points_hoalac.xyz
+
+Layer: obm_building_optional
+  Status      : missing_optional
+  Required    : False
+  Files       : 0
+  Size        : 0.0 B
+  Role        : optional building footprint/height cross-check
+  Height cols : 
+  Destination : obm
+  Note        : Optional OpenBuildingMap source used only for building-height comparison if available.
+
+Layer: gba_building_footprint_height
+  Status      : available
+  Required    : True
+  Files       : 5
+  Size        : 11.8 MB
+  Role        : hard polygon obstacle; building footprint + building height
+  Height cols : height;height_m
+  Destination : gba
+  Note        : Primary building obstacle source. Use footprint polygons and height/LoD1 attributes.
+  Copied files:
+    - gba/hoalac_polygon.gpkg
+    - gba/gba_lod1_buildings_hoalac_clipped.gpkg
+    - gba/gba_lod1_buildings_centroid_hoalac.xyz
+    - gba/gba_lod1_buildings_centroid_hoalac_with_info.xyz
+    - gba/gba_lod1_buildings_vertices_hoalac.xyz
+
+Layer: opencellid_communication_soft_risk
+  Status      : available
+  Required    : False
+  Files       : 23
+  Size        : 1.0 MB
+  Role        : soft communication risk/support; not a hard obstacle
+  Height cols : range_m
+  Destination : opencellid
+  Note        : OpenCelliD cells/range/support/risk grids clipped to Hoa Lac. Use as soft cost, not hard obstacle.
+  Copied files:
+    - opencellid/opencellid_cells_hoalac.gpkg
+    - opencellid/opencellid_cells_hoalac.csv
+    - opencellid/opencellid_range_circles_hoalac.gpkg
+    - opencellid/communication_support_grid_hoalac.gpkg
+    - opencellid/communication_support_grid_hoalac.csv
+    - opencellid/communication_risk_grid_hoalac.xyz
+    - opencellid/communication_support_grid_hoalac.xyz
+    - opencellid/opencellid_cdma_cells_hoalac.xyz
+    - opencellid/opencellid_cells_hoalac.xyz
+    - opencellid/opencellid_gsm_cells_hoalac.xyz
+    - opencellid/opencellid_lte_cells_hoalac.xyz
+    - opencellid/opencellid_nbiot_cells_hoalac.xyz
+    - opencellid/opencellid_nr_cells_hoalac.xyz
+    - opencellid/opencellid_umts_cells_hoalac.xyz
+    - opencellid/opencellid_unknown_cells_hoalac.xyz
+    - opencellid/opencellid_cdma_cells_hoalac.gpkg
+    - opencellid/opencellid_gsm_cells_hoalac.gpkg
+    - opencellid/opencellid_lte_cells_hoalac.gpkg
+    - opencellid/opencellid_nbiot_cells_hoalac.gpkg
+    - opencellid/opencellid_nr_cells_hoalac.gpkg
+    - opencellid/opencellid_umts_cells_hoalac.gpkg
+    - opencellid/opencellid_unknown_cells_hoalac.gpkg
+    - opencellid/hoalac_polygon.gpkg
+
+Layer: otp_dem_elevation
+  Status      : available
+  Required    : True
+  Files       : 3
+  Size        : 1.4 MB
+  Role        : terrain/elevation base for AGL calculation
+  Height cols : 
+  Destination : opentopography
+  Note        : DEM/elevation source. For AGL: height_agl = z_voxel - dem_elevation.
+  Copied files:
+    - opentopography/COP30_hoalac_clipped.tif
+    - opentopography/COP30_elevation_m.tif
+    - opentopography/COP30_elevation_hoalac.xyz
+

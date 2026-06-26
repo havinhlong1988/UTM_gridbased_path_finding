@@ -1,0 +1,108 @@
+HOA LAC URBAN / TERRAIN LAYER AVAILABILITY REPORT
+============================================================
+
+Interpretation:
+  USABLE                  : layer has data and can be used now
+  USABLE_BUT_HEIGHT_ASSUMED: layer has data, but height should be checked
+  REFERENCE_AVAILABLE     : useful for risk/reference, not a hard obstacle
+  EMPTY_IN_AOI            : no OSM features found inside Hoa Lac polygon
+  EMPTY_OR_MISSING        : file missing or no valid raster cells
+
+[USABLE] terrain_dem
+  count       : 356189
+  role        : terrain_lower_boundary
+  use_now     : YES
+  value       : elevation_or_derived min=nan max=nan
+  geometry    : raster cells
+  height src  : raster elevation
+  note        : Use as ground elevation / lower no-fly boundary.
+
+[USABLE] terrain_slope
+  count       : 354188
+  role        : terrain_risk/reference
+  use_now     : OPTIONAL
+  value       : elevation_or_derived min=nan max=nan
+  geometry    : raster cells
+  height src  : raster elevation
+  note        : Useful for terrain complexity, not a direct air obstacle.
+
+[USABLE] terrain_TRI
+  count       : 356189
+  role        : terrain_risk/reference
+  use_now     : OPTIONAL
+  value       : elevation_or_derived min=nan max=nan
+  geometry    : raster cells
+  height src  : raster elevation
+  note        : Useful for terrain roughness, not a direct air obstacle.
+
+[USABLE_BUT_HEIGHT_ASSUMED] buildings
+  count       : 200
+  role        : hard_obstacle
+  use_now     : YES
+  value       : height_m min=3.0 max=33.0
+  geometry    : Polygon:200
+  height src  : OSM height/building:levels, otherwise assumed default
+  note        : Use as 3D blocked volume. Check heights because many OSM buildings may use default height.
+
+[REFERENCE_AVAILABLE] roads_centerlines
+  count       : 1238
+  role        : risk/reference
+  use_now     : REFERENCE_ONLY
+  value       : road_code min=1.0 max=11.0
+  geometry    : LineString:1226; MultiLineString:12
+  height src  : no height; surface network only
+  note        : Use for road-crossing risk, access, or traffic exposure. Do not block airspace by default.
+
+[REFERENCE_AVAILABLE] road_vertices
+  count       : 10533
+  role        : risk/reference points
+  use_now     : REFERENCE_ONLY
+  value       : road_code min=1.0 max=11.0
+  geometry    : Point:10533
+  height src  : no height; derived points only
+  note        : Useful for checking OSM geometry vertices. Prefer sampled road points for gridded risk.
+
+[USABLE] road_sample_points
+  count       : 13236
+  role        : risk/reference points
+  use_now     : YES_FOR_SOFT_RISK
+  value       : road_code min=1.0 max=11.0
+  geometry    : Point:13236
+  height src  : no height; derived points only
+  note        : Good for rasterizing road-proximity or road-crossing risk.
+
+[USABLE_BUT_HEIGHT_ASSUMED] powerlines_cables
+  count       : 13
+  role        : hard_obstacle
+  use_now     : YES_WITH_BUFFER
+  value       : assumed_zmax_agl_m min=35.0 max=35.0
+  geometry    : LineString:13
+  height src  : assumed z_min/z_max unless OSM/custom height added
+  note        : Use as conservative 3D blocked corridor. Need field/DSM check for true cable height and sag.
+
+[USABLE] power_towers_poles
+  count       : 50
+  role        : hard_obstacle
+  use_now     : YES_WITH_BUFFER
+  value       : height_m min=35.0 max=35.0
+  geometry    : Point:50
+  height src  : OSM height if available, otherwise tower/pole default
+  note        : Use as point/cylinder obstacle. Check whether tower/pole classification is complete.
+
+[USABLE_BUT_HEIGHT_ASSUMED] traffic_lights
+  count       : 4
+  role        : low_altitude_obstacle
+  use_now     : YES_IF_LOW_ALTITUDE
+  value       : height_m min=6.0 max=6.0
+  geometry    : Point:4
+  height src  : usually assumed default height
+  note        : Use near DB/DK/FLZ or flight below about 20 m AGL. Usually not important for normal cruise altitude.
+
+[EMPTY_IN_AOI] street_lamps
+  count       : 0
+  role        : low_altitude_obstacle
+  use_now     : NO_DATA_IN_AOI
+  value       : height_m min=nan max=nan
+  geometry    : none
+  height src  : usually assumed default height
+  note        : Use near takeoff/landing corridors. OSM completeness can be poor.

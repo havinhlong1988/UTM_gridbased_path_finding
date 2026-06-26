@@ -1,0 +1,3 @@
+source,file,n_buildings,height_column_used,height_valid_count,height_missing_count,height_min_m,height_mean_m,height_median_m,height_max_m,footprint_area_valid_count,footprint_area_total_m2,footprint_area_mean_m2,footprint_area_median_m2,footprint_area_max_m2,volume_total_m3,volume_mean_m3,volume_median_m3,volume_max_m3
+GBA,gba/hoalac_polygon.gpkg,1,NOT_FOUND,0,1,,,,,1,28178315.50136701,28178315.50136701,28178315.50136701,28178315.50136701,,,,
+GBA,gba/gba_lod1_buildings_hoalac_clipped.gpkg,14894,height_m,14894,0,0.011438543908298016,3.832255940458772,3.8217949867248535,40.2683219909668,14894,1607551.9009624878,107.93285221985282,51.433045901431214,46602.6981950634,7731619.364110922,519.1096659131813,187.72767795554478,276915.93099677877

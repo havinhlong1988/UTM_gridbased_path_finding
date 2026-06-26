@@ -66,7 +66,7 @@ OUTDIR = Path("output/01_HoaLac_studies_area/globalbuildingatlas_lod1")
 
 # Existing Hoa Lac tile is usually:
 # output/01_HoaLac_studies_area/globalbuildingatlas_lod1/raw_tiles/e105_n25_e110_n20.parquet
-SKIP_DOWNLOAD_NEW = True
+SKIP_DOWNLOAD_NEW = False
 MANUAL_LOCAL_PARQUET_FILES = []
 MANUAL_REMOTE_PARQUET_URLS = []
 

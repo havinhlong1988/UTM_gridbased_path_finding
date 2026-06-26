@@ -1,0 +1,2 @@
+path,crs,width,height,nodata,valid_count,min,p1,p50,p99,max,rank,score
+input/data_senario1/opentopography/COP30_elevation_m.tif,EPSG:4326,253,171,-9999.0,31755,4.458774566650391,5.869824466705322,15.491884231567383,38.784450378417944,104.17967987060547,0,-30

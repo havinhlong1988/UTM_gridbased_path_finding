@@ -1,0 +1,19 @@
+Scenario-1 obstacle input collection
+Time: 2026-06-26T13:39:42
+Source root: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/downloaddata/output/01_HoaLac_studies_area
+Destination: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/make_model_voxel/input/data_senario1
+Figures: /home/vinh-longha/Research/UTM/UTM_gridbased_path_finding/make_model_voxel/input/data_senario1/figures
+Requested source path: ../downloaddata/output/01_HoaLac_studies_area/
+Requested destination path: input/data_senario1/
+
+Collected layer groups:
+  - metadata_aoi: available (7 files)
+  - osm_powerlines_agl: available (4 files)
+  - osm_power_poles_towers_agl: available (4 files)
+  - osm_road_centerline: available (4 files)
+  - osm_traffic_lights_agl: available (2 files)
+  - osm_street_lamps_agl_optional: available (2 files)
+  - obm_building_optional: missing_optional (0 files)
+  - gba_building_footprint_height: available (5 files)
+  - opencellid_communication_soft_risk: available (23 files)
+  - otp_dem_elevation: available (3 files)

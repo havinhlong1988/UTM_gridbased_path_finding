@@ -1,0 +1,22 @@
+BASE 3D VOXEL DATA BOX SUMMARY
+======================================================================
+Output dir              : output/02_base_3d_voxel_box_model_senario1
+UTM CRS                 : EPSG:32648
+Domain mode             : bbox
+Plot XY coordinate mode  : local origin at data-box SW corner
+Grid size               : 50 x 50 x 5 m
+Z range                 : 0 to 130 m AGL
+Buffer                  : 50 m
+XY cell count            : 15,943
+XY flyable cells         : 11,274
+XY no-fly cells          : 4,669
+Z level count            : 26
+Total voxel count        : 414,518
+Flyable voxel count      : 293,124
+No-fly voxel count       : 121,394
+
+Rule:
+  Full rectangular data box covers polygon.buffer(BUFFER_M).bounds.
+  Voxel centers inside original polygon are flyable.
+  Voxel centers outside original polygon are no-fly.
+  Buffer polygon is saved for reference and later constraints.

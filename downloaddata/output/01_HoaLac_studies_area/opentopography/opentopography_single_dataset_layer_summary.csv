@@ -1,0 +1,7 @@
+layer,source_type,exists,status,band,valid_pixels,min,max,mean,std,note
+original_band_1,original_downloaded_dataset,True,usable,1,31755,4.458774566650391,104.17967987060547,16.325025358637042,7.486377327763117,OK
+elevation,derived_from_single_dataset,True,usable,1,31755,4.458774566650391,104.17967987060547,16.325025358637042,7.486377327763117,OK
+slope_degree,derived_from_single_dataset,True,usable,1,31148,0.0,28.15123176574707,2.8511715434809948,2.6536028569845738,OK
+aspect_degree,derived_from_single_dataset,True,usable,1,31148,-0.0,359.9820251464844,168.7654880405084,107.49599168214243,OK
+hillshade,derived_from_single_dataset,True,usable,1,31148,90.56982421875,238.1980438232422,179.6757238884555,9.040228473326142,OK
+tri_m,derived_from_single_dataset,True,usable,1,31755,0.0,12.684139251708984,1.5353197910816623,1.1687500054721258,OK

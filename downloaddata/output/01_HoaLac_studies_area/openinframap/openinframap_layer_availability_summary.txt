@@ -1,0 +1,25 @@
+========== OPENINFRAMAP / OSM INFRASTRUCTURE LAYER SUMMARY ==========
+
+--- Scope: bbox ---
+power_lines                  | n=  361 | points=   0 lines= 361 polys=   0 | status=available | use=yes_with_height_assumption
+power_substations            | n=   89 | points=  38 lines=   0 polys=  51 | status=available | use=yes_with_height_assumption
+power_supports               | n= 3145 | points=3145 lines=   0 polys=   0 | status=available | use=yes_with_height_assumption
+power_plants_generators      | n=   53 | points=   1 lines=   0 polys=  52 | status=available | use=yes_with_height_assumption
+solar_generation             | n=   50 | points=   0 lines=   0 polys=  50 | status=available | use=yes_low_altitude
+telecom_masts_towers         | n=  119 | points= 113 lines=   0 polys=   6 | status=available | use=yes_with_height_assumption
+telecom_facilities           | n=    7 | points=   2 lines=   0 polys=   5 | status=available | use=check_geometry_first
+pipelines                    | n=    1 | points=   0 lines=   1 polys=   0 | status=available | use=soft_risk_or_ignore_for_air_obstacle
+oil_gas_facilities           | n=    0 | points=   0 lines=   0 polys=   0 | status=missing_or_not_mapped_in_area | use=yes_as_restricted_or_high_risk_buffer
+water_infrastructure         | n=  178 | points=   6 lines=   0 polys= 172 | status=available | use=yes_for_towers_check_others
+
+--- Scope: hoalac ---
+power_lines                  | n=   15 | points=   0 lines=  15 polys=   0 | status=available | use=yes_with_height_assumption
+power_substations            | n=    5 | points=   3 lines=   0 polys=   2 | status=available | use=yes_with_height_assumption
+power_supports               | n=   52 | points=  52 lines=   0 polys=   0 | status=available | use=yes_with_height_assumption
+power_plants_generators      | n=    2 | points=   0 lines=   0 polys=   2 | status=available | use=yes_with_height_assumption
+solar_generation             | n=    2 | points=   0 lines=   0 polys=   2 | status=available | use=yes_low_altitude
+telecom_masts_towers         | n=    0 | points=   0 lines=   0 polys=   0 | status=missing_or_not_mapped_in_area | use=yes_with_height_assumption
+telecom_facilities           | n=    2 | points=   0 lines=   0 polys=   2 | status=available | use=check_geometry_first
+pipelines                    | n=    0 | points=   0 lines=   0 polys=   0 | status=missing_or_not_mapped_in_area | use=soft_risk_or_ignore_for_air_obstacle
+oil_gas_facilities           | n=    0 | points=   0 lines=   0 polys=   0 | status=missing_or_not_mapped_in_area | use=yes_as_restricted_or_high_risk_buffer
+water_infrastructure         | n=    2 | points=   0 lines=   0 polys=   2 | status=available | use=yes_for_towers_check_others

@@ -1,0 +1,8 @@
+OpenTopography single-dataset layer availability summary
+======================================================================
+original_band_1          | original_downloaded_dataset      | usable     | valid=   31755 | min=4.459 max=104.180 mean=16.325
+elevation                | derived_from_single_dataset      | usable     | valid=   31755 | min=4.459 max=104.180 mean=16.325
+slope_degree             | derived_from_single_dataset      | usable     | valid=   31148 | min=0.000 max=28.151 mean=2.851
+aspect_degree            | derived_from_single_dataset      | usable     | valid=   31148 | min=-0.000 max=359.982 mean=168.765
+hillshade                | derived_from_single_dataset      | usable     | valid=   31148 | min=90.570 max=238.198 mean=179.676
+tri_m                    | derived_from_single_dataset      | usable     | valid=   31755 | min=0.000 max=12.684 mean=1.535

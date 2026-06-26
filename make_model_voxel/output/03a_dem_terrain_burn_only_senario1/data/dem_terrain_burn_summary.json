@@ -1,0 +1,40 @@
+{
+  "terrain_source": "input/data_senario1/opentopography/COP30_elevation_m.tif",
+  "terrain_stats": {
+    "source": "input/data_senario1/opentopography/COP30_elevation_m.tif",
+    "raw_min": 4.458774566650391,
+    "raw_max": 104.17967987060547,
+    "sample_count": 15943,
+    "sample_valid_count": 11265,
+    "sample_nan_count": 4678,
+    "sample_min_before_fill": 4.458774566650391,
+    "sample_max_before_fill": 104.17967987060547,
+    "final_sample_min": 4.458774566650391,
+    "final_sample_p1": 6.0,
+    "final_sample_p5": 7.346693134307861,
+    "final_sample_p50": 15.484016418457031,
+    "final_sample_p95": 26.6060884475708,
+    "final_sample_p99": 36.19113868713379,
+    "final_sample_max": 104.17967987060547
+  },
+  "sw_reference": {
+    "reference_name": "southwest_corner_of_xy_cell_data_box",
+    "x_sw_corner_utm_m": 552250.0,
+    "y_sw_corner_utm_m": 2320100.0,
+    "xmax_utm_m": 559700.0,
+    "ymax_utm_m": 2325450.0
+  },
+  "terrain_burn_vertical_rule": "z_bottom_below_dem",
+  "voxel_vertical_reference": "MSL",
+  "dx_m": 50.0,
+  "dy_m": 50.0,
+  "dz_m": 5.0,
+  "flyable_slowness": 0.3,
+  "nofly_slowness": 10.0,
+  "total_voxels": 414518,
+  "base_nofly_input_voxels": 121394,
+  "outside_polygon_nofly_voxels": 121394,
+  "dem_burned_voxels": 61096,
+  "final_flyable_dem_only_voxels": 250700,
+  "final_nofly_dem_only_voxels": 163818
+}
