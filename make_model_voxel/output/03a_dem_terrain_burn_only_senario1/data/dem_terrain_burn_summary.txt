@@ -14,14 +14,24 @@ No-fly slowness            : 10 s/m
 Total voxels               : 414,518
 Input/base no-fly voxels    : 121,394
 Outside-polygon no-fly     : 121,394
-Topo/DEM-burned voxels   : 61,096
+Topo/DEM-burned voxels    : 61,096
 Building-burned voxels     : 7,874
+Powerline pole-column voxels: 553
+Powerline line-air voxels  : 734
+Obstacle-only voxels       : 9,028
+Topo OR obstacle voxels    : 66,236
 Building height input ref  : AGL (base = DEM terrain MSL)
-Final flyable voxels       : 246,756
-Final no-fly voxels        : 167,762
-Plot topo-burn cells       : True
+Powerline height ref       : AGL; line mode=cable_band; pole mode=from_ground_to_height
+Powerline line/pole buffer : 15 / 8 m
+Powerline topo-aware base   : True (clearance=0 m)
+Final flyable voxels       : 245,610
+Final no-fly voxels        : 168,908
+Plot topo-burn cells       : False
 Plot building-burn cells   : True
-Plot burn draw order       : topo_then_building
+Plot powerline-burn cells  : True
+Plot burn draw order       : topo_then_building_then_powerline
+Fig02 true-XY unified path : True (topo/building use powerline-style burn-mask logic)
+Fig02 visible-axis limits  : True
 Clip building plot volume  : True
 Clip topo plot volume      : False
 Stack building on topo     : True
@@ -45,9 +55,15 @@ DEM burn equation:
   building_volume = building_footprint_area * building_height_agl
   building_top_msl = terrain_msl + building_height_agl + building_buffer
   burn_building_volume = XY_cell intersects footprint AND voxel_z intersects [terrain_msl, building_top_msl]
-  burn_obstacle_volume = burn_dem_terrain OR burn_building_volume
+  powerline line/strand: aerial band around terrain_msl + line_height_agl
+  powerline pole/tower : column from terrain_msl to terrain_msl + pole_height_agl
+  burn_powerline_system = burn_powerline_line_air OR burn_powerline_pole_column
+  burn_solid_obstacle_column = burn_building_volume OR burn_powerline_pole_column
+  burn_airborne_obstacle_band = burn_powerline_line_air
+  burn_obstacle_volume = burn_solid_obstacle_column OR burn_airborne_obstacle_band
+  burn_topo_or_obstacle_volume = burn_dem_terrain OR burn_obstacle_volume
   burn_outside_polygon = inside_polygon != 1
-  final_nofly_dem_only = base_nofly OR burn_outside_polygon OR burn_obstacle_volume
+  final_nofly_dem_only = base_nofly OR burn_outside_polygon OR burn_dem_terrain OR burn_obstacle_volume
   z_agl = z_msl - terrain_msl
 
 Plot coordinate equation:

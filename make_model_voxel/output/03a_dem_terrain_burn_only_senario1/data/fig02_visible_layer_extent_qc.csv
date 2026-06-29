@@ -1,0 +1,5 @@
+layer,n_voxels_displayed,n_xy_cells_displayed,x_from_sw_min_m,x_from_sw_max_m,y_from_sw_min_m,y_from_sw_max_m,terrain_min_msl_m,terrain_p50_msl_m,terrain_max_msl_m,z_min_msl_m,z_max_msl_m,z_min_agl_m,z_max_agl_m,height_agl_min_m,height_agl_p50_m,height_agl_max_m
+topo,0,0,,,,,,,,,,,,,,
+building,7769,3830,225.0,7325.0,125.0,5275.0,4.5,16.635398864746094,91.94918060302734,4.5,96.70479583740234,0.0,40.2683219909668,1.0054335594177246,5.415031433105469,40.2683219909668
+powerline,1279,363,1775.0,5475.0,225.0,5275.0,5.0,13.276086807250977,29.67816162109375,10.0,67.17816162109375,0.03800773620605469,37.5,35.0,35.0,35.0
+figure_axis_limits,0,0,200.0,7350.0,100.0,5300.0,,,,0.0,120.0,,,,,

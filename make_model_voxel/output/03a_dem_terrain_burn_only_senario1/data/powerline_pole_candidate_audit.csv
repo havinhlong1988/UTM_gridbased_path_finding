@@ -1,0 +1,2 @@
+rank,kind,path,feature_count_raw,crs,columns,bounds_before_crs,bounds_after_to_utm,height_column,height_source,feature_count_used,height_min_m,height_p50_m,height_max_m
+0,pole,input/data_senario1/osm/power_poles_towers/power_towers_poles_hoalac_clipped.gpkg,50,EPSG:4326,"design,line_attachment,power,structure,power_simple,feature_code,height_m,geometry","[105.519841, 20.9908307, 105.5552002, 21.0280103]","[554027.7286009837, 2321232.8471074942, 557702.1844151507, 2325345.250196935]",height_m,column:height_m; default_if_nan=20_m_AGL,50,35.0,35.0,35.0
