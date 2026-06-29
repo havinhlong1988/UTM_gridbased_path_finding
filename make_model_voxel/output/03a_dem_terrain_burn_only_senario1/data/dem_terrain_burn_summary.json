@@ -35,6 +35,18 @@
   "base_nofly_input_voxels": 121394,
   "outside_polygon_nofly_voxels": 121394,
   "dem_burned_voxels": 61096,
-  "final_flyable_dem_only_voxels": 250700,
-  "final_nofly_dem_only_voxels": 163818
+  "building_burned_voxels": 7874,
+  "building_xy_cells": 3893,
+  "building_height_input_reference": "AGL",
+  "building_height_source_reference_note": "AGL",
+  "clip_3d_building_burn_plot_to_true_volume": true,
+  "clip_3d_topo_burn_plot_to_terrain_surface": false,
+  "plot_3d_building_stack_on_topo": true,
+  "plot_3d_building_fill_gap_above_topo": true,
+  "plot_3d_building_stack_base_mode": "topo_voxel_top",
+  "final_flyable_dem_only_voxels": 246756,
+  "final_nofly_dem_only_voxels": 167762,
+  "plot_burn_cells_by_topo": true,
+  "plot_burn_cells_by_building": true,
+  "burn_cell_plot_draw_order": "topo_then_building"
 }

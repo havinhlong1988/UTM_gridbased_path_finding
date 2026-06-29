@@ -14,9 +14,19 @@ No-fly slowness            : 10 s/m
 Total voxels               : 414,518
 Input/base no-fly voxels    : 121,394
 Outside-polygon no-fly     : 121,394
-DEM-burned voxels          : 61,096
-Final flyable voxels       : 250,700
-Final no-fly voxels        : 163,818
+Topo/DEM-burned voxels   : 61,096
+Building-burned voxels     : 7,874
+Building height input ref  : AGL (base = DEM terrain MSL)
+Final flyable voxels       : 246,756
+Final no-fly voxels        : 167,762
+Plot topo-burn cells       : True
+Plot building-burn cells   : True
+Plot burn draw order       : topo_then_building
+Clip building plot volume  : True
+Clip topo plot volume      : False
+Stack building on topo     : True
+Fill building gap above topo: True
+Building stack base mode   : topo_voxel_top
 
 DEM sampled terrain statistics:
   raw_min                     : 4.458774566650391
@@ -30,8 +40,14 @@ DEM sampled terrain statistics:
 DEM burn equation:
   terrain_msl = DEM(x, y)
   burn_dem_terrain = z_bottom_msl < terrain_msl + clearance_buffer
+  building_height_agl = source_height if BUILDING_HEIGHT_INPUT_REFERENCE='AGL'
+  building_height_agl = source_top_msl - terrain_msl if BUILDING_HEIGHT_INPUT_REFERENCE='MSL_TOP'
+  building_volume = building_footprint_area * building_height_agl
+  building_top_msl = terrain_msl + building_height_agl + building_buffer
+  burn_building_volume = XY_cell intersects footprint AND voxel_z intersects [terrain_msl, building_top_msl]
+  burn_obstacle_volume = burn_dem_terrain OR burn_building_volume
   burn_outside_polygon = inside_polygon != 1
-  final_nofly_dem_only = base_nofly OR burn_outside_polygon OR burn_dem_terrain
+  final_nofly_dem_only = base_nofly OR burn_outside_polygon OR burn_obstacle_volume
   z_agl = z_msl - terrain_msl
 
 Plot coordinate equation:

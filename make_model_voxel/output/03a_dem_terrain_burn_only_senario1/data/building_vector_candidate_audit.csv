@@ -1,0 +1,3 @@
+rank,path,feature_count,crs,height_column,columns
+0,input/data_senario1/gba/gba_lod1_buildings_hoalac_clipped.gpkg,14894,EPSG:4326,height,"height,id,source,height_m,gba_id,footprint_area_m2,volume_m3,centroid_lon,centroid_lat,geometry"
+1,input/data_senario1/gba/hoalac_polygon.gpkg,1,EPSG:4326,,"name,geometry"
