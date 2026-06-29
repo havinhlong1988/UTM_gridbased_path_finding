@@ -46,7 +46,8 @@ Outputs
     └── figures/
         ├── 00_dem_terrain_msl_cells_SW.png
         ├── 01_dem_terrain_burn_z_slices_SW.png
-        └── 02_3d_dem_burned_cells_SW.png
+        ├── 02_3d_dem_burned_cells_SW.png
+        └── 03_3d_topography_mesh_msl_SW.png
 """
 
 from __future__ import annotations
@@ -154,10 +155,44 @@ DEM_PLOT_VMIN_M = 5.0
 DEM_PLOT_VMAX_M = 35.0
 DEM_3D_ZMAX_PLOT_M = 40.0
 
+# Separate topography mesh figure.
+# The mesh Z coordinate is the sampled terrain_msl_m value in meters MSL.
+# Color scale is display-only and does not change DEM or burn values.
+PLOT_3D_TOPOGRAPHY_MESH = True
+TOPO_MESH_MAX_GRID_CELLS = 40000
+TOPO_MESH_ZLIM_MAX_M = None  # None = use real terrain_msl_m max; set 40.0 if you want a clipped view.
+TOPO_MESH_EDGE_ALPHA = 0.22
+TOPO_MESH_SURFACE_ALPHA = 0.92
+
 # 3D figure uses sampled complete XY columns only, to keep the plot manageable.
 # The saved model still burns every cell; this limit affects the figure only.
 MAX_3D_DEM_XY_COLUMNS = 1200
 MAX_3D_DEM_VOXELS_TO_RENDER = 22000
+MAX_3D_DEM_VOXEL_CUBES_TO_RENDER = 1800
+# Figure 02 voxel transparency.
+# Smaller alpha = more transparent.
+DEM_STATE_PLOT_GREEN_ALPHA = 0.24
+DEM_STATE_PLOT_BURNED_GRAY_ALPHA = 0.46
+DEM_STATE_PLOT_EDGE_ALPHA = 0.28
+DEM_STATE_PLOT_EDGE_LINEWIDTH = 0.14
+
+# Increase visual-only Z exaggeration for Figure 02.
+# This does NOT change saved voxel Z values.
+DEM_STATE_RIGHT_PANEL_Z_EXAGGERATION = 22.0
+
+# Figure 02 colors.
+DEM_STATE_UNBURNED_GREEN_RGB = (0.25, 0.85, 0.35)
+DEM_STATE_BURNED_GRAY_RGB = (0.55, 0.55, 0.55)
+DEM_STATE_SHOW_CENTER_NODES = True
+# Figure 02 option:
+#   True  = plot green non-burned inside-AOI cells + gray DEM-burned cells
+#   False = plot only gray DEM-burned cells; hide green non-burned cells
+PLOT_UNBURNED_3D_DEM_CELLS = False
+DEM_STATE_CENTER_NODE_SIZE = 1.2
+# For coarse figure blocks:
+#   "any"      -> a coarse block becomes black if any full-resolution cell in it is DEM-burned.
+#   "majority" -> a coarse block becomes black only if >=50% of its cells are DEM-burned.
+DEM_STATE_COARSE_BURN_RULE = "any"
 
 # Safety check: direct raster samples should not exceed the raw DEM range.
 RASTER_RANGE_TOLERANCE_M = 0.75
@@ -1070,31 +1105,133 @@ def plot_dem_burn_z_slices(paths: Paths, voxels: pd.DataFrame) -> None:
     print(f"[OK] Saved figure: {out_png}")
 
 
-def select_complete_dem_columns_for_3d(voxels: pd.DataFrame) -> pd.DataFrame:
-    burn_df = voxels[voxels["final_nofly_dem_only"].astype(bool)].copy()
-    if burn_df.empty:
-        return burn_df
+def draw_axis_triad_screen_inset(ax) -> None:
+    """
+    Draw a clean X/Y/Z orientation triad in screen coordinates.
 
-    rng = np.random.default_rng(RANDOM_SEED)
-    xy_ids = np.sort(burn_df["xy_id"].dropna().astype(int).unique())
+    This is copied in spirit from the base voxel-box QC figure:
+    it is visual-only and does not change data coordinates.
+    """
+    origin = (0.87, 0.82)
+    x_tip = (0.95, 0.79)
+    y_tip = (0.94, 0.85)
+    z_tip = (0.87, 0.93)
 
-    if xy_ids.size > MAX_3D_DEM_XY_COLUMNS:
-        # Keep a reproducible spatially distributed subset by using random selection
-        # of complete columns, never random individual voxels.
-        xy_ids = np.sort(rng.choice(xy_ids, size=MAX_3D_DEM_XY_COLUMNS, replace=False))
+    arrow_kw = dict(
+        arrowstyle="-|>",
+        linewidth=1.9,
+        color="black",
+        mutation_scale=13,
+        shrinkA=0,
+        shrinkB=0,
+    )
 
-    out = burn_df[burn_df["xy_id"].isin(xy_ids)].copy()
+    ax.annotate("", xy=x_tip, xytext=origin, xycoords="axes fraction", textcoords="axes fraction", arrowprops=arrow_kw)
+    ax.annotate("", xy=y_tip, xytext=origin, xycoords="axes fraction", textcoords="axes fraction", arrowprops=arrow_kw)
+    ax.annotate("", xy=z_tip, xytext=origin, xycoords="axes fraction", textcoords="axes fraction", arrowprops=arrow_kw)
 
-    while len(out) > MAX_3D_DEM_VOXELS_TO_RENDER and len(xy_ids) > 10:
-        keep_count = max(10, int(len(xy_ids) * 0.85))
-        xy_ids = np.sort(rng.choice(xy_ids, size=keep_count, replace=False))
-        out = burn_df[burn_df["xy_id"].isin(xy_ids)].copy()
+    ax.text2D(x_tip[0] + 0.008, x_tip[1] - 0.004, "X", transform=ax.transAxes, fontsize=11, fontweight="bold")
+    ax.text2D(y_tip[0] + 0.006, y_tip[1] + 0.002, "Y", transform=ax.transAxes, fontsize=11, fontweight="bold")
+    ax.text2D(z_tip[0] - 0.004, z_tip[1] + 0.010, "Z", transform=ax.transAxes, fontsize=11, fontweight="bold")
+
+
+def choose_dem_state_plot_strides(voxels_inside: pd.DataFrame) -> tuple[int, int, int]:
+    """
+    Choose coarse plotting strides for Figure 02.
+
+    This follows the same idea as the base voxel-box script: the saved model
+    remains full resolution, but the figure is aggregated to a readable number
+    of translucent 3D blocks.
+
+    For DEM-burn checking we prefer to keep z stride = 1 for as long as possible,
+    so the vertical burn surface is not overly smeared.
+    """
+    nx = int(voxels_inside["ix"].nunique())
+    ny = int(voxels_inside["iy"].nunique())
+    nz = int(voxels_inside["iz"].nunique())
+
+    sx = sy = 1
+    sz = 1
+
+    def displayed_count() -> int:
+        return int(math.ceil(nx / sx) * math.ceil(ny / sy) * math.ceil(nz / sz))
+
+    while displayed_count() > MAX_3D_DEM_VOXEL_CUBES_TO_RENDER:
+        displayed_xy = np.array([nx / sx, ny / sy], dtype=float)
+        if displayed_xy[0] >= displayed_xy[1]:
+            sx += 1
+        else:
+            sy += 1
+
+        # Only start thinning Z if XY thinning alone is not enough.
+        if (sx > nx and sy > ny) and displayed_count() > MAX_3D_DEM_VOXEL_CUBES_TO_RENDER:
+            sz += 1
+
+        if sx > max(nx, 1) * 2 and sy > max(ny, 1) * 2:
+            break
+
+    return sx, sy, sz
+
+
+def make_coarse_inside_voxels_for_dem_state_plot(voxels: pd.DataFrame) -> tuple[pd.DataFrame, tuple[int, int, int]]:
+    """
+    Build the Figure-02 plotting model.
+
+    Important display rules:
+      - Outside-polygon cells are removed from this plot.
+      - Non-burned inside-AOI cells are green.
+      - DEM-burned inside-AOI cells are black.
+      - Coarsening affects only the figure, never the saved model.
+    """
+    df = voxels.copy()
+
+    if "inside_polygon" in df.columns:
+        inside_mask = pd.to_numeric(df["inside_polygon"], errors="coerce").fillna(0).astype(int) == 1
+        df = df[inside_mask].copy()
+
+    if df.empty:
+        return df, (1, 1, 1)
+
+    sx, sy, sz = choose_dem_state_plot_strides(df)
+
+    df["gx"] = (pd.to_numeric(df["ix"], errors="coerce").astype(int) // sx).astype(int)
+    df["gy"] = (pd.to_numeric(df["iy"], errors="coerce").astype(int) // sy).astype(int)
+    df["gz"] = (pd.to_numeric(df["iz"], errors="coerce").astype(int) // sz).astype(int)
+
+    df["burn_dem_terrain_int"] = df["burn_dem_terrain"].astype(bool).astype(int)
+
+    coarse = (
+        df.groupby(["gx", "gy", "gz"], as_index=False)
+        .agg(
+            x_from_sw_m=("x_from_sw_m", "mean"),
+            y_from_sw_m=("y_from_sw_m", "mean"),
+            z_center_msl_m=("z_center_msl_m", "mean"),
+            z_bottom_msl_m=("z_bottom_msl_m", "min"),
+            z_top_msl_m=("z_top_msl_m", "max"),
+            ix=("ix", "mean"),
+            iy=("iy", "mean"),
+            iz=("iz", "mean"),
+            terrain_msl_m=("terrain_msl_m", "mean"),
+            burn_fraction=("burn_dem_terrain_int", "mean"),
+            voxel_count=("burn_dem_terrain_int", "size"),
+        )
+    )
+
+    if DEM_STATE_COARSE_BURN_RULE.lower() == "majority":
+        coarse["burn_dem_terrain"] = coarse["burn_fraction"] >= 0.5
+    else:
+        coarse["burn_dem_terrain"] = coarse["burn_fraction"] > 0.0
+
+    coarse["flyable_after_dem_burn"] = (~coarse["burn_dem_terrain"]).astype(int)
 
     print(
-        f"[INFO] 3D DEM figure renders {len(out):,} burned voxels "
-        f"from {len(xy_ids):,} complete XY columns. The output model contains all burned cells."
+        f"[INFO] Figure 02 coarse blocks: {len(coarse):,}; "
+        f"stride={sx} x {sy} x {sz}; "
+        f"green={int((~coarse['burn_dem_terrain']).sum()):,}; "
+        f"black={int(coarse['burn_dem_terrain'].sum()):,}; "
+        "outside-polygon cells hidden."
     )
-    return out
+    return coarse, (sx, sy, sz)
 
 
 def voxel_block_faces_from_df(
@@ -1102,8 +1239,15 @@ def voxel_block_faces_from_df(
     dx: float,
     dy: float,
     dz: float,
+    color_mode: str,
 ) -> tuple[list[list[tuple[float, float, float]]], list[tuple[float, float, float, float]]]:
-    if df.empty:
+    """
+    Convert voxel center points to cube faces.
+
+    color_mode:
+        "dem_state" -> green for non-burned, gray for DEM-burned.
+    """
+    if df is None or df.empty:
         return [], []
 
     hx, hy, hz = dx / 2.0, dy / 2.0, dz / 2.0
@@ -1120,106 +1264,163 @@ def voxel_block_faces_from_df(
         [3, 0, 4, 7],
     ]
 
-    rgba = (0.02, 0.02, 0.02, 0.48)
     faces: list[list[tuple[float, float, float]]] = []
     facecolors: list[tuple[float, float, float, float]] = []
-    xyz = df[["x_from_sw_m", "y_from_sw_m", "z_center_msl_m"]].to_numpy(dtype=float)
 
-    for center in xyz:
+    xyz = df[["x_from_sw_m", "y_from_sw_m", "z_center_msl_m"]].to_numpy(dtype=float)
+    burned = df["burn_dem_terrain"].astype(bool).to_numpy()
+
+    for center, is_burned in zip(xyz, burned):
         vertices = offsets + center.reshape(1, 3)
+        if color_mode == "dem_state":
+            if bool(is_burned):
+                rgba = (*DEM_STATE_BURNED_GRAY_RGB, DEM_STATE_PLOT_BURNED_GRAY_ALPHA)
+            else:
+                rgba = (*DEM_STATE_UNBURNED_GREEN_RGB, DEM_STATE_PLOT_GREEN_ALPHA)
+        else:
+            rgba = (0.45, 0.45, 0.45, 0.45)
+
         for ids in face_ids:
             faces.append([(float(vertices[i, 0]), float(vertices[i, 1]), float(vertices[i, 2])) for i in ids])
             facecolors.append(rgba)
+
     return faces, facecolors
 
 
 def plot_3d_dem_burn(paths: Paths, voxels: pd.DataFrame, xy_gdf: gpd.GeoDataFrame, dx: float, dy: float, dz: float) -> None:
+    """
+    Figure 02: 3D voxel burn state inside the AOI.
+
+    This is intentionally styled like the right-hand panel of the base voxel
+    model QC figure:
+      - connected translucent voxel blocks;
+      - outside/no-fly polygon cells are hidden;
+      - non-burned model volume is green-filled;
+      - DEM-burned volume is gray-filled.
+    """
     out_png = paths.fig_dir / "02_3d_dem_burned_cells_SW.png"
 
-    plot_df = select_complete_dem_columns_for_3d(voxels)
+    coarse, strides = make_coarse_inside_voxels_for_dem_state_plot(voxels)
+    sx, sy, sz = strides
+    plot_dx = dx * sx
+    plot_dy = dy * sy
+    plot_dz = dz * sz
 
     fig = plt.figure(figsize=(12, 9.2), dpi=FIG_DPI)
     ax = fig.add_subplot(111, projection="3d")
 
-    if not plot_df.empty:
-        faces, facecolors = voxel_block_faces_from_df(plot_df, dx, dy, dz)
+    if not coarse.empty:
+        # Optional Figure 02 display:
+        #   - green cells = inside-AOI non-burned cells
+        #   - gray cells = inside-AOI DEM-burned cells
+        # The saved model is not changed by this option.
+        green = coarse[~coarse["burn_dem_terrain"].astype(bool)].copy()
+        black = coarse[coarse["burn_dem_terrain"].astype(bool)].copy()
+
+        if PLOT_UNBURNED_3D_DEM_CELLS:
+            plot_order = pd.concat([green, black], ignore_index=True)
+        else:
+            plot_order = black.copy()
+
+        faces, facecolors = voxel_block_faces_from_df(plot_order, plot_dx, plot_dy, plot_dz, color_mode="dem_state")
         if faces:
             pc = Poly3DCollection(
                 faces,
                 facecolors=facecolors,
-                edgecolors=(1.0, 1.0, 1.0, 0.12),
-                linewidths=0.06,
+                edgecolors=(1.0, 1.0, 1.0, DEM_STATE_PLOT_EDGE_ALPHA),
+                linewidths=DEM_STATE_PLOT_EDGE_LINEWIDTH,
                 antialiased=True,
             )
             ax.add_collection3d(pc)
 
-        # Overlay the DEM surface at every XY cell center as a topographic reference.
-        # Inside AOI is colored by DEM elevation. Outside AOI is black because it is no-fly.
-        if "inside_polygon" in xy_gdf.columns:
-            inside_mask = pd.to_numeric(
-                xy_gdf["inside_polygon"],
-                errors="coerce",
-            ).fillna(0).astype(int) == 1
-        else:
-            inside_mask = pd.Series(True, index=xy_gdf.index)
+        if DEM_STATE_SHOW_CENTER_NODES:
+            if PLOT_UNBURNED_3D_DEM_CELLS and not green.empty:
+                ax.scatter(
+                    green["x_from_sw_m"], green["y_from_sw_m"], green["z_center_msl_m"],
+                    s=DEM_STATE_CENTER_NODE_SIZE, c=[DEM_STATE_UNBURNED_GREEN_RGB], alpha=0.42, depthshade=False,
+                    label="Non-burned voxel centers",
+                )
+            if not black.empty:
+                ax.scatter(
+                    black["x_from_sw_m"], black["y_from_sw_m"], black["z_center_msl_m"],
+                    s=DEM_STATE_CENTER_NODE_SIZE, c=[DEM_STATE_BURNED_GRAY_RGB], alpha=0.62, depthshade=False,
+                    label="DEM-burned voxel centers",
+                )
 
-        inside_xy = xy_gdf[inside_mask].copy()
-        outside_xy = xy_gdf[~inside_mask].copy()
+        x_min = float(coarse["x_from_sw_m"].min() - plot_dx / 2.0)
+        x_max = float(coarse["x_from_sw_m"].max() + plot_dx / 2.0)
+        y_min = float(coarse["y_from_sw_m"].min() - plot_dy / 2.0)
+        y_max = float(coarse["y_from_sw_m"].max() + plot_dy / 2.0)
+        z_min = float(max(0.0, coarse["z_bottom_msl_m"].min()))
+        z_max = float(coarse["z_top_msl_m"].max())
 
-        sc = ax.scatter(
-            inside_xy["x_from_sw_m"],
-            inside_xy["y_from_sw_m"],
-            inside_xy["terrain_msl_m"],
-            c=inside_xy["terrain_msl_m"],
-            cmap="terrain",
-            vmin=DEM_PLOT_VMIN_M,
-            vmax=DEM_PLOT_VMAX_M,
-            s=1.6,
-            alpha=0.82,
-            depthshade=False,
-        )
-        if not outside_xy.empty:
-            ax.scatter(
-                outside_xy["x_from_sw_m"],
-                outside_xy["y_from_sw_m"],
-                outside_xy["terrain_msl_m"],
-                c="black",
-                s=1.6,
-                alpha=0.90,
-                depthshade=False,
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+
+        try:
+            ax.set_box_aspect(
+                (
+                    x_max - x_min,
+                    y_max - y_min,
+                    (z_max - z_min) * DEM_STATE_RIGHT_PANEL_Z_EXAGGERATION,
+                )
             )
-        cbar = fig.colorbar(sc, ax=ax, shrink=0.62, pad=0.08)
-        cbar.set_label(f"DEM surface elevation inside AOI (m MSL), display {DEM_PLOT_VMIN_M:g}–{DEM_PLOT_VMAX_M:g}")
+        except Exception:
+            pass
 
-        ax.set_xlim(float(xy_gdf["x_from_sw_m"].min() - dx), float(xy_gdf["x_from_sw_m"].max() + dx))
-        ax.set_ylim(float(xy_gdf["y_from_sw_m"].min() - dy), float(xy_gdf["y_from_sw_m"].max() + dy))
-        zmin = min(0.0, float(voxels["z_bottom_msl_m"].min()))
-        # Display only up to 40 m MSL so isolated high COP30/DSM pixels do not stretch the 3D view.
-        # This is figure-only; the saved DEM burn model still uses the original sampled DEM.
-        ax.set_zlim(zmin, DEM_3D_ZMAX_PLOT_M)
+        draw_axis_triad_screen_inset(ax)
 
-    ax.legend(handles=[Patch(facecolor=(0.45, 0.45, 0.45, 0.45), edgecolor="gray", label="Final no-fly voxel cells")], loc="upper left", fontsize=8)
-    ax.set_title("3D DEM terrain + outside-polygon no-fly", fontweight="bold")
+        n_green = int((~coarse["burn_dem_terrain"].astype(bool)).sum())
+        n_black = int(coarse["burn_dem_terrain"].astype(bool).sum())
+    else:
+        n_green = 0
+        n_black = 0
+
+    handles = []
+    if PLOT_UNBURNED_3D_DEM_CELLS:
+        handles.append(
+            Patch(
+                facecolor=(*DEM_STATE_UNBURNED_GREEN_RGB, DEM_STATE_PLOT_GREEN_ALPHA),
+                edgecolor="white",
+                label=f"Non-burned inside AOI ({n_green:,})",
+            )
+        )
+    handles.append(
+        Patch(
+            facecolor=(*DEM_STATE_BURNED_GRAY_RGB, DEM_STATE_PLOT_BURNED_GRAY_ALPHA),
+            edgecolor="white",
+            label=f"DEM-burned inside AOI ({n_black:,})",
+        )
+    )
+    ax.legend(handles=handles, loc="upper left", fontsize=8)
+
+    ax.set_title("3D DEM burn state: inside-AOI voxel model", fontweight="bold")
     ax.set_xlabel("Distance east from SW reference (m)")
     ax.set_ylabel("Distance north from SW reference (m)")
     ax.set_zlabel("Z MSL (m)")
-    ax.view_init(elev=27, azim=-48)
+    ax.view_init(elev=24, azim=-45)
 
-    try:
-        xr = ax.get_xlim3d()[1] - ax.get_xlim3d()[0]
-        yr = ax.get_ylim3d()[1] - ax.get_ylim3d()[0]
-        zr = ax.get_zlim3d()[1] - ax.get_zlim3d()[0]
-        ax.set_box_aspect((xr, yr, zr * 16.0))
-    except Exception:
-        pass
+    if PLOT_UNBURNED_3D_DEM_CELLS:
+        state_text = "Green filled blocks = inside-AOI model voxels not burned by DEM\\n"
+    else:
+        state_text = "Green non-burned cells are hidden by option\\n"
 
     note = (
-        "Gray filled blocks = final no-fly cells (terrain burn or outside polygon)\n"
-        f"Colored DEM surface display is clipped to {DEM_PLOT_VMAX_M:g} m MSL\n"
-        "3D figure samples complete XY columns; data output keeps all no-fly cells"
+        state_text
+        + "Gray filled blocks = inside-AOI DEM-burned voxels\n"
+        + "Outside-polygon cells are hidden in this figure\n"
+        + f"Rendered block = {plot_dx:g} × {plot_dy:g} × {plot_dz:g} m; saved model remains {dx:g} × {dy:g} × {dz:g} m\n"
+        + f"Voxel transparency: green alpha={DEM_STATE_PLOT_GREEN_ALPHA:g}, gray alpha={DEM_STATE_PLOT_BURNED_GRAY_ALPHA:g}\n"
+        + f"Vertical display exaggeration = {DEM_STATE_RIGHT_PANEL_Z_EXAGGERATION:g}×\n"
+        + "Topography mesh is kept as Figure 03"
     )
-    ax.text2D(0.02, 0.02, note, transform=ax.transAxes, fontsize=8,
-              bbox=dict(facecolor="white", edgecolor="gray", alpha=0.88))
+    ax.text2D(
+        0.02, 0.02, note,
+        transform=ax.transAxes,
+        fontsize=8,
+        bbox=dict(facecolor="white", edgecolor="gray", alpha=0.86),
+    )
 
     fig.tight_layout()
     fig.savefig(out_png, bbox_inches="tight")
@@ -1227,10 +1428,214 @@ def plot_3d_dem_burn(paths: Paths, voxels: pd.DataFrame, xy_gdf: gpd.GeoDataFram
     print(f"[OK] Saved figure: {out_png}")
 
 
+
+def _downsample_regular_grid_for_mesh(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    z_grid: np.ndarray,
+    max_cells: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Downsample a regular grid for faster 3D mesh plotting only."""
+    ny, nx = z_grid.shape
+    if nx * ny <= max_cells:
+        return x_values, y_values, z_grid
+
+    step = int(math.ceil(math.sqrt((nx * ny) / float(max_cells))))
+    step = max(1, step)
+    return x_values[::step], y_values[::step], z_grid[::step, ::step]
+
+
+def _make_xy_grid_from_xy_gdf(
+    xy_gdf: gpd.GeoDataFrame,
+    value_col: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Make X, Y, Z mesh arrays from the XY-cell table using local SW coordinates."""
+    piv = xy_gdf.pivot_table(
+        index="y_from_sw_m",
+        columns="x_from_sw_m",
+        values=value_col,
+        aggfunc="mean",
+    )
+    piv = piv.sort_index(ascending=True)
+    x_values = piv.columns.to_numpy(dtype=float)
+    y_values = piv.index.to_numpy(dtype=float)
+    z_grid = piv.to_numpy(dtype=float)
+    x_grid, y_grid = np.meshgrid(x_values, y_values)
+    return x_grid, y_grid, z_grid
+
+
+def plot_3d_topography_mesh(paths: Paths, xy_gdf: gpd.GeoDataFrame, sw_ref: dict, utm_crs) -> None:
+    """
+    Plot a true 3D topographic mesh.
+
+    Horizontal coordinates:
+        X = distance east from SW reference (m)
+        Y = distance north from SW reference (m)
+
+    Vertical coordinate:
+        Z = terrain_msl_m, sampled DEM elevation in meters MSL
+
+    Outside-AOI cells are drawn black because they are treated as no-fly,
+    but their Z coordinate is still the sampled terrain MSL elevation.
+    """
+    if not PLOT_3D_TOPOGRAPHY_MESH:
+        return
+
+    out_png = paths.fig_dir / "03_3d_topography_mesh_msl_SW.png"
+
+    x_grid, y_grid, z_grid = _make_xy_grid_from_xy_gdf(xy_gdf, "terrain_msl_m")
+
+    # Downsample plotting grid if needed. This affects only the figure, not the model.
+    x1d = x_grid[0, :]
+    y1d = y_grid[:, 0]
+    x1d_ds, y1d_ds, z_ds = _downsample_regular_grid_for_mesh(
+        x1d,
+        y1d,
+        z_grid,
+        TOPO_MESH_MAX_GRID_CELLS,
+    )
+    x_ds, y_ds = np.meshgrid(x1d_ds, y1d_ds)
+
+    finite = np.isfinite(z_ds)
+    if not finite.any():
+        print("[WARN] Topography mesh skipped because terrain_msl_m has no finite values.")
+        return
+
+    norm = plt.Normalize(vmin=DEM_PLOT_VMIN_M, vmax=DEM_PLOT_VMAX_M)
+    cmap = plt.get_cmap("terrain")
+    facecolors = cmap(norm(np.where(finite, z_ds, np.nan)))
+    facecolors[..., -1] = TOPO_MESH_SURFACE_ALPHA
+
+    # Outside polygon should be visually no-fly/black in the mesh too.
+    outside_ds = None
+    if "inside_polygon" in xy_gdf.columns:
+        inside_numeric = xy_gdf.copy()
+        inside_numeric["inside_polygon_int"] = pd.to_numeric(
+            inside_numeric["inside_polygon"],
+            errors="coerce",
+        ).fillna(0).astype(int)
+        _, _, inside_grid = _make_xy_grid_from_xy_gdf(inside_numeric, "inside_polygon_int")
+        _, _, inside_ds = _downsample_regular_grid_for_mesh(
+            x1d,
+            y1d,
+            inside_grid,
+            TOPO_MESH_MAX_GRID_CELLS,
+        )
+        outside_ds = inside_ds < 1
+        facecolors[outside_ds] = (0.0, 0.0, 0.0, TOPO_MESH_SURFACE_ALPHA)
+
+    fig = plt.figure(figsize=(12, 9.2), dpi=FIG_DPI)
+    ax = fig.add_subplot(111, projection="3d")
+
+    ax.plot_surface(
+        x_ds,
+        y_ds,
+        z_ds,
+        facecolors=facecolors,
+        rstride=1,
+        cstride=1,
+        linewidth=0.18,
+        edgecolor=(0.0, 0.0, 0.0, TOPO_MESH_EDGE_ALPHA),
+        antialiased=True,
+        shade=False,
+    )
+
+    # Add AOI/data-box outlines at the local base level for spatial reference.
+    z_base = float(np.nanmin(z_ds[finite]))
+    aoi_local = load_optional_outline(
+        AOI_UTM_FILE,
+        utm_crs,
+        sw_ref["x_sw_corner_utm_m"],
+        sw_ref["y_sw_corner_utm_m"],
+    )
+    if not aoi_local.empty:
+        for geom in aoi_local.geometry:
+            if geom.geom_type == "Polygon":
+                xs, ys = geom.exterior.xy
+                ax.plot(xs, ys, zs=z_base, color="black", linewidth=1.2)
+            elif geom.geom_type == "MultiPolygon":
+                for part in geom.geoms:
+                    xs, ys = part.exterior.xy
+                    ax.plot(xs, ys, zs=z_base, color="black", linewidth=1.2)
+
+    data_box_local = load_optional_outline(
+        DATA_BOX_UTM_FILE,
+        utm_crs,
+        sw_ref["x_sw_corner_utm_m"],
+        sw_ref["y_sw_corner_utm_m"],
+    )
+    if not data_box_local.empty:
+        for geom in data_box_local.geometry:
+            if geom.geom_type == "Polygon":
+                xs, ys = geom.exterior.xy
+                ax.plot(xs, ys, zs=z_base, color="gray", linewidth=0.8, linestyle="--")
+            elif geom.geom_type == "MultiPolygon":
+                for part in geom.geoms:
+                    xs, ys = part.exterior.xy
+                    ax.plot(xs, ys, zs=z_base, color="gray", linewidth=0.8, linestyle="--")
+
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.64, pad=0.08)
+    cbar.set_label(f"DEM elevation color scale (m MSL), display {DEM_PLOT_VMIN_M:g}–{DEM_PLOT_VMAX_M:g}")
+
+    handles = [
+        Patch(facecolor=cmap(norm((DEM_PLOT_VMIN_M + DEM_PLOT_VMAX_M) / 2.0)), edgecolor="black", label="Topography mesh: Z = DEM MSL"),
+    ]
+    if outside_ds is not None and np.any(outside_ds):
+        handles.append(Patch(facecolor="black", edgecolor="black", label="Outside AOI / no-fly"))
+    ax.legend(handles=handles, loc="upper left", fontsize=8)
+
+    ax.set_title("3D topography mesh from DEM MSL elevation", fontweight="bold")
+    ax.set_xlabel("Distance east from SW reference (m)")
+    ax.set_ylabel("Distance north from SW reference (m)")
+    ax.set_zlabel("Terrain elevation, Z MSL (m)")
+    ax.set_xlim(float(np.nanmin(x_ds)), float(np.nanmax(x_ds)))
+    ax.set_ylim(float(np.nanmin(y_ds)), float(np.nanmax(y_ds)))
+
+    zmin = float(np.nanmin(z_ds[finite]))
+    zmax_real = float(np.nanmax(z_ds[finite]))
+    if TOPO_MESH_ZLIM_MAX_M is None:
+        zmax_plot = zmax_real
+    else:
+        zmax_plot = float(TOPO_MESH_ZLIM_MAX_M)
+    if math.isclose(zmin, zmax_plot):
+        zmax_plot = zmin + 1.0
+    ax.set_zlim(zmin, zmax_plot)
+
+    ax.view_init(elev=32, azim=-48)
+    try:
+        xr = ax.get_xlim3d()[1] - ax.get_xlim3d()[0]
+        yr = ax.get_ylim3d()[1] - ax.get_ylim3d()[0]
+        zr = ax.get_zlim3d()[1] - ax.get_zlim3d()[0]
+        ax.set_box_aspect((xr, yr, zr * 22.0))
+    except Exception:
+        pass
+
+    note = (
+        "Mesh Z coordinate = terrain_msl_m (DEM elevation, meters MSL)\n"
+        f"Color display scale = {DEM_PLOT_VMIN_M:g}–{DEM_PLOT_VMAX_M:g} m; data values are not changed\n"
+        f"Real mesh Z range shown: {zmin:.2f}–{zmax_real:.2f} m MSL"
+    )
+    ax.text2D(
+        0.02,
+        0.02,
+        note,
+        transform=ax.transAxes,
+        fontsize=8,
+        bbox=dict(facecolor="white", edgecolor="gray", alpha=0.88),
+    )
+
+    fig.tight_layout()
+    fig.savefig(out_png, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[OK] Saved figure: {out_png}")
+
 def make_figures(paths: Paths, xy_gdf: gpd.GeoDataFrame, voxels: pd.DataFrame, sw_ref: dict, utm_crs, dx: float, dy: float, dz: float) -> None:
     plot_dem_terrain(paths, xy_gdf, sw_ref, utm_crs)
     plot_dem_burn_z_slices(paths, voxels)
     plot_3d_dem_burn(paths, voxels, xy_gdf, dx, dy, dz)
+    plot_3d_topography_mesh(paths, xy_gdf, sw_ref, utm_crs)
 
 
 # ======================================================================
