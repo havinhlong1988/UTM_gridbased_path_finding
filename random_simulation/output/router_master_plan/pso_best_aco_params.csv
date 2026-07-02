@@ -1,0 +1,2 @@
+aco_alpha,aco_beta,aco_evaporation,aco_pheromone_q,distance_weight,density_weight,clearance_weight,emergency_weight,tn_bonus,flz_penalty,fitness
+0.6,2.8124529807760026,0.33732126488605535,0.523583139254415,0.25,0.5,1.0,0.5,3.3249241046829594,3.446890305814906,-19991843.43520122
